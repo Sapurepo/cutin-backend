@@ -29,14 +29,21 @@ export function registerErrorHandler(app: FastifyInstance): void {
 
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({
-        error: { code: error.code, message: error.message, details: error.details },
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        },
       })
     }
 
     const fastifyError = error as FastifyError
     if (fastifyError.statusCode !== undefined && fastifyError.statusCode < 500) {
       return reply.status(fastifyError.statusCode).send({
-        error: { code: fastifyError.code ?? 'BAD_REQUEST', message: fastifyError.message },
+        error: {
+          code: fastifyError.code ?? 'BAD_REQUEST',
+          message: fastifyError.message,
+        },
       })
     }
 
@@ -48,7 +55,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
 
   app.setNotFoundHandler((_request, reply) => {
     return reply.status(404).send({
-      error: { code: 'NOT_FOUND', message: '요청한 리소스를 찾을 수 없습니다.' },
+      error: {
+        code: 'NOT_FOUND',
+        message: '요청한 리소스를 찾을 수 없습니다.',
+      },
     })
   })
 }

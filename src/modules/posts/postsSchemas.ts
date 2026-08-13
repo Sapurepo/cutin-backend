@@ -1,10 +1,11 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { postStatuses, postVisibilities } from '../../db/schema/index.ts'
 import { cursorQuerySchema, pageSchema } from '../../shared/pagination/paginationSchemas.ts'
 import { mediaSchema } from '../media/mediaSchemas.ts'
 import { reactionSummarySchema } from '../reactions/reactionsSchemas.ts'
 
-export const postIdParamsSchema = z.object({ id: z.uuid() })
+export const postIdSchema = z.uuid()
 
 /** 실제 상한은 템플릿의 cutCount다. 여기 값은 비정상적으로 큰 요청을 막는 안전장치일 뿐이다. */
 const maxCutsPerRequest = 20
@@ -25,7 +26,9 @@ export const templateSchema = z.object({
   slots: z.array(templateSlotSchema),
 })
 
-export const templatesResponseSchema = z.object({ items: z.array(templateSchema) })
+export const templatesResponseSchema = z.object({
+  items: z.array(templateSchema),
+})
 
 export const cutInputSchema = z.object({
   cutIndex: z.number().int().min(0),
@@ -87,3 +90,11 @@ export const shareLinkSchema = z.object({
 })
 
 export const feedQuerySchema = cursorQuerySchema
+
+export class TemplatesResponseDto extends createZodDto(templatesResponseSchema) {}
+export class CreatePostBodyDto extends createZodDto(createPostBodySchema) {}
+export class UpdatePostBodyDto extends createZodDto(updatePostBodySchema) {}
+export class PublishPostBodyDto extends createZodDto(publishPostBodySchema) {}
+export class PostDto extends createZodDto(postSchema) {}
+export class PostPageDto extends createZodDto(postPageSchema) {}
+export class ShareLinkDto extends createZodDto(shareLinkSchema) {}

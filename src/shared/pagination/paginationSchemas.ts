@@ -1,3 +1,4 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 
 export const cursorQuerySchema = z.object({
@@ -13,3 +14,5 @@ export function pageSchema<Item extends z.ZodType>(item: Item) {
     nextCursor: z.string().nullable(),
   })
 }
+
+export class CursorQueryDto extends createZodDto(cursorQuerySchema) {}

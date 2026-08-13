@@ -1,3 +1,4 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { notificationSlots } from '../../db/schema/index.ts'
 
@@ -43,3 +44,16 @@ export const notificationPreferencesResponseSchema = z.object({
   slots: z.array(z.enum(notificationSlots)),
   pushEnabled: z.boolean(),
 })
+
+export class NicknameAvailabilityQueryDto extends createZodDto(nicknameAvailabilityQuerySchema) {}
+export class NicknameAvailabilityResponseDto extends createZodDto(
+  nicknameAvailabilityResponseSchema,
+) {}
+export class UpdateMeBodyDto extends createZodDto(updateMeBodySchema) {}
+export class UserProfileDto extends createZodDto(userProfileSchema) {}
+export class NotificationPreferencesBodyDto extends createZodDto(
+  notificationPreferencesBodySchema,
+) {}
+export class NotificationPreferencesResponseDto extends createZodDto(
+  notificationPreferencesResponseSchema,
+) {}

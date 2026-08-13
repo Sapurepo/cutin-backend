@@ -10,53 +10,77 @@ OpenAPI 스펙(`pnpm openapi:export` → `openapi.json`)으로 클라이언트 �
 
 | 레이어 | 선택 |
 | --- | --- |
-| HTTP | Fastify 5 |
-| 검증·문서 | Zod + `fastify-type-provider-zod` + `@fastify/swagger` |
+| 프레임워크 | NestJS 11 (Fastify 어댑터) |
+| 검증·문서 | Zod + `nestjs-zod` + `@nestjs/swagger` |
 | DB | PostgreSQL 16 + Drizzle |
 | 잡·스케줄러 | pg-boss (Postgres 기반, Redis 없음) |
-| 테스트 | Vitest + Testcontainers |
+| 테스트 | Vitest + Testcontainers (변환은 SWC) |
 | Lint/Format | Biome |
-| 런타임 | Node 22, TypeScript(ESM), pnpm |
+| 런타임 | Node 22, TypeScript 5.9(ESM), pnpm |
 
-명세는 NestJS를 제안했으나 v12의 전면 개편(ESM·Vitest·oxlint·Standard Schema)이 임박한
-시점이라 그린필드 착수에 부적합하다고 판단해 Fastify를 택했다. Zod 스키마 한 벌이 런타임 검증·
-타입·OpenAPI를 모두 만들어내는 구성이 Swift 클라이언트 codegen에 결정적이었다.
+P0~P4는 Fastify로 만들었다가 P5 착수 전에 NestJS로 옮겼다. 이유는 DI 컨테이너,
+모듈 경계 강제, 전역 Guard, 그리고 앞으로 필요한 스케줄러·RBAC 생태계다.
+
+**Zod가 유일한 계약이라는 원칙은 그대로다.** `nestjs-zod`의 `createZodDto`로 감싸면
+같은 스키마가 런타임 검증·타입·OpenAPI를 계속 함께 만들어낸다. class-validator로 갈아타면
+스펙과 런타임이 갈라질 수 있어 쓰지 않는다.
+
+### 이 조합이 강제하는 것
+
+NestJS DI는 런타임에 `design:paramtypes` 메타데이터를 읽는다. 여기서 세 가지가 따라온다.
+
+1. `experimentalDecorators` + `emitDecoratorMetadata`가 필요하다 →
+   **`erasableSyntaxOnly`와 `verbatimModuleSyntax`를 쓸 수 없다.**
+2. esbuild는 `emitDecoratorMetadata`를 지원하지 않는다 →
+   dev·test 변환기가 **SWC**다 (`tsx` 아님, Vitest도 `unplugin-swc` 경유).
+3. TypeScript 7 패키지는 컴파일러 JS API를 내보내지 않아 `@swc-node/register`·`@nestjs/cli`가
+   깨진다 → **TypeScript는 5.9에 고정**한다.
 
 ## 구조 규약
 
-NestJS의 모듈 관례를 쓰지 않는 대신, 아래 규약을 지켜 일관성을 유지한다.
-
 ```
 src/
-  app.ts                  Fastify 인스턴스 조립 (라우트 등록은 전부 여기서)
-  server.ts               부트스트랩 · graceful shutdown
-  config/env.ts           Zod로 환경변수 파싱 — 누락 시 부팅 실패
+  main.ts                    부트스트랩 (NestFactory + FastifyAdapter)
+  appModule.ts               루트 모듈. 전역 Guard·Pipe·Interceptor·Filter를 여기서 건다
+  appSetup.ts                Fastify 인스턴스에 직접 해야 하는 설정 (본문 파서 등)
+  openapi.ts                 OpenAPI 문서 조립
+  config/env.ts              Zod로 환경변수 파싱 — 누락 시 부팅 실패
   db/
-    client.ts             createDatabase(url) → { db, close }
-    schema/               Drizzle 테이블 정의 (도메인별 파일)
-    migrations/           drizzle-kit 생성물, 직접 수정 금지
+    client.ts                createDatabase(url) → { db, close }
+    databaseModule.ts        DATABASE 토큰 제공 (@Global)
+    schema/                  Drizzle 테이블 정의 (도메인별 파일)
+    migrations/              drizzle-kit 생성물, 직접 수정 금지
   modules/<domain>/
-    <domain>Routes.ts     라우트 + 스키마 참조. HTTP 관심사만
-    <domain>Service.ts    도메인 규칙. HTTP를 모른다
-    <domain>Repository.ts Drizzle 쿼리. 도메인 규칙을 모른다
-    <domain>Schemas.ts    요청·응답 Zod 스키마
-  shared/                 여러 도메인이 함께 쓰는 것만
-  jobs/                   pg-boss 워커
-test/                     라우트 레벨 통합 테스트
+    <domain>Module.ts        의존 모듈을 imports로 명시. 재사용할 것만 exports
+    <domain>Controller.ts    HTTP 관심사만. 쿼리를 직접 쓰지 않는다
+    <domain>Service.ts       도메인 규칙. HTTP를 모른다
+    <domain>Repository.ts    Drizzle 쿼리. 도메인 규칙을 모른다
+    <domain>Schemas.ts       Zod 스키마 + `createZodDto` 래퍼
+  shared/                    여러 도메인이 함께 쓰는 것만
+  jobs/                      pg-boss 워커
+test/                        라우트 레벨 통합 테스트
 ```
 
-- **도메인 하나 = Fastify 플러그인 하나.** 플러그인은 `FastifyPluginAsyncZod` 타입으로 쓴다.
-- 4파일이 모두 필요한 건 아니다. 리포지토리가 얇으면 서비스에 합쳐도 되지만, **라우트에 쿼리를
+- **도메인 하나 = Nest 모듈 하나.** 모듈 간 의존은 `imports`/`exports`로 드러낸다.
+  순환이 생기면 부팅에서 터지므로 그때 경계를 다시 본다.
+- 5파일이 모두 필요한 건 아니다. 리포지토리가 얇으면 서비스에 합쳐도 되지만, **컨트롤러에 쿼리를
   직접 쓰지는 않는다.**
 - 공용 코드는 두 번째 사용처가 생겼을 때 `shared/`로 옮긴다. 미리 만들지 않는다.
+- 교체 가능한 것은 심볼 토큰으로 주입한다 (`DATABASE`, `STORAGE`, `OAUTH_VERIFIER`).
+  테스트가 `overrideProvider`로 갈아끼운다.
 
 ## 코딩 규칙
 
 - **파일·폴더명은 camelCase** (`postService.ts`, `createPostSchema.ts`). kebab-case 금지.
 - **상대 임포트에 `.ts` 확장자를 붙인다** (`./appError.ts`). `rewriteRelativeImportExtensions`가
   빌드 시 `.js`로 바꿔준다.
-- `erasableSyntaxOnly`가 켜져 있다 — enum·namespace·파라미터 프로퍼티를 쓸 수 없다.
-  열거값은 유니언 타입 + `as const` 배열로 표현한다.
+- **DI로 주입되거나 파라미터 타입으로 쓰이는 클래스는 `import type`으로 들여오지 않는다.**
+  타입만 남으면 `design:paramtypes`가 비어 주입이 조용히 깨지고, DTO는 검증이 통째로 건너뛰어진다.
+  이래서 Biome의 `useImportType` 규칙을 꺼두었다.
+- enum·namespace는 여전히 쓰지 않는다. 열거값은 유니언 타입 + `as const` 배열로 표현한다.
+  (파라미터 프로퍼티는 NestJS 관례라 허용한다.)
+- **인증은 deny-by-default다.** 전역 `AuthGuard`가 모든 라우트를 막고 `@Public()`으로만 뚫는다.
+  라우트를 추가하다 인증을 빠뜨려도 공개되지 않는다.
 - 오류는 `AppError`로 던진다. 응답은 전부 `{ error: { code, message, details? } }` 한 모양이고
   `code`는 클라이언트가 분기에 쓰므로 함부로 바꾸지 않는다.
 - 인프라(스토리지·푸시)는 **아직 미정이라 인터페이스로만 다룬다.** 특정 벤더 SDK를 도메인 코드에

@@ -1,7 +1,8 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { cursorQuerySchema, pageSchema } from '../../shared/pagination/paginationSchemas.ts'
 
-export const userIdParamsSchema = z.object({ id: z.uuid() })
+export const userIdSchema = z.uuid()
 
 export const publicUserSchema = z.object({
   id: z.uuid(),
@@ -41,3 +42,10 @@ export const publicProfileSchema = publicUserSchema.extend({
   /** 내가 이 사용자를 차단한 상태인지. 상대가 나를 차단한 경우에는 404가 나간다. */
   blocking: z.boolean(),
 })
+
+export class UserPageDto extends createZodDto(userPageSchema) {}
+export class FollowResultDto extends createZodDto(followResultSchema) {}
+export class SearchQueryDto extends createZodDto(searchQuerySchema) {}
+export class RecommendQueryDto extends createZodDto(recommendQuerySchema) {}
+export class RecommendedUsersDto extends createZodDto(recommendedUsersSchema) {}
+export class PublicProfileDto extends createZodDto(publicProfileSchema) {}
