@@ -40,7 +40,8 @@ export class PostsController {
   @ApiOperation({
     summary: '프레임(외형) 목록',
     description:
-      '컷 그리드를 감싸는 외형이다. 길이 값은 캔버스 폭 대비 비율이라 출력 해상도와 무관하다.',
+      '컷 그리드를 감싸는 외형이다. 길이 값은 캔버스 폭 대비 비율이라 출력 해상도와 무관하다. ' +
+      '노출 순서대로 내려가며 첫 항목이 기본 외형이다 — 포스트의 frame이 null일 때 이 값으로 그린다.',
   })
   @ZodResponse({ status: 200, type: FramesResponseDto })
   @ApiErrors(401)

@@ -391,6 +391,7 @@ test('프레임 8종이 비율값으로 내려온다', async () => {
   }
 
   expect(items).toHaveLength(8)
+  // 첫 항목이 기본 외형이다 — 앞에 끼워 넣으면 frame이 null인 기존 포스트가 달라 보인다.
   expect(items[0]?.code).toBe('basic')
   // basic만 푸터가 없다.
   expect(items.filter((item) => item.footer === null).map((item) => item.code)).toEqual(['basic'])
@@ -429,7 +430,7 @@ test('draft에 프레임을 붙이면 포스트에 실린다', async () => {
   expect(patched.statusCode).toBe(200)
   expect(patched.json().frame).toMatchObject({ code: 'noir', background: '#111113' })
 
-  // null을 보내면 기본 외형으로 되돌아간다.
+  // null은 선택 해제다. 서버가 기본 외형으로 채워 내려보내지 않는다.
   const cleared = await context.app.inject({
     method: 'PATCH',
     url: `/posts/${postId}`,

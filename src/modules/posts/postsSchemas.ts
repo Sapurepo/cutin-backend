@@ -35,6 +35,17 @@ export const templatesResponseSchema = z.object({
 })
 
 /**
+ * 기본 외형은 **서버가 풀지 않는다.** null은 "아직 고르지 않았다"는 상태 그대로 내려가고,
+ * 무엇으로 그릴지는 클라이언트가 정한다. 서버가 대신 채우면 "미선택"과 "기본을 골랐다"가
+ * 구분되지 않아 편집 화면이 둘을 표현할 수 없고, 기본값 결정이 렌더링하지 않는 쪽에 생긴다.
+ */
+const FRAME_UNSET_NOTE =
+  '외형을 고르지 않았으면 null이다. 서버가 기본 외형으로 대신 채우지 않는다 — GET /frames의 첫 항목이 기본이다.'
+
+/** 같은 규칙의 쓰기 쪽. null을 "기본으로 지정"으로 읽으면 미선택 상태를 만들 수 없다. */
+const FRAME_CLEAR_NOTE = 'null은 선택 해제다. 기본 외형으로 치환되지 않고 미선택 상태가 된다.'
+
+/**
  * 컷 그리드를 감싸는 외형. 길이 값은 전부 캔버스 폭 대비 비율이다.
  * `isActive`·`sortOrder`는 싣지 않는다 — 활성만 내려주고 배열이 이미 정렬돼 있다
  * (`templateSchema`와 같은 이유).
@@ -68,8 +79,7 @@ export const updatePostBodySchema = z
     caption: z.string().max(500).nullable().optional(),
     visibility: z.enum(postVisibilities).optional(),
     thumbnailCutIndex: z.number().int().min(0).nullable().optional(),
-    /** 외형 선택. null을 보내면 기본 외형으로 되돌린다. */
-    frameId: z.uuid().nullable().optional(),
+    frameId: z.uuid().nullable().optional().describe(FRAME_CLEAR_NOTE),
     /** 부분 수정이 아니라 전체 교체다. */
     cuts: z.array(cutInputSchema).max(maxCutsPerRequest).optional(),
   })
@@ -97,8 +107,7 @@ export const postSchema = z.object({
   id: z.uuid(),
   author: postAuthorSchema,
   template: templateSchema,
-  /** 고르지 않았으면 null. 클라이언트가 기본 외형으로 그린다. */
-  frame: frameSchema.nullable(),
+  frame: frameSchema.nullable().describe(FRAME_UNSET_NOTE),
   status: z.enum(postStatuses),
   visibility: z.enum(postVisibilities),
   caption: z.string().nullable(),

@@ -98,7 +98,7 @@ export class PostsService {
     const { cuts, ...rest } = values
     const template = await this.requireTemplate(values.templateId ?? post.templateId)
 
-    // null은 기본 외형으로 되돌리는 것이라 검사하지 않는다.
+    // null은 선택 해제라 검사할 프레임이 없다. 서버가 기본 외형으로 치환하지 않는다.
     if (rest.frameId != null) await this.requireFrame(rest.frameId)
     if (cuts !== undefined) {
       await this.validateCuts(cuts, template, authorId)
