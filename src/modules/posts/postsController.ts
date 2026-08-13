@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { ZodResponse } from 'nestjs-zod'
 import { CurrentUser } from '../../shared/auth/authGuard.ts'
+import { ApiErrors } from '../../shared/errors/apiErrors.ts'
 import { CursorQueryDto } from '../../shared/pagination/paginationSchemas.ts'
 import { ZodParam } from '../../shared/validation/zodParam.ts'
 import { userIdSchema } from '../social/socialSchemas.ts'
@@ -29,6 +30,7 @@ export class PostsController {
     description: '컷 수와 레이아웃은 서버가 정의한다. 클라이언트가 컷 수를 가정하지 않는다.',
   })
   @ZodResponse({ status: 200, type: TemplatesResponseDto })
+  @ApiErrors(401)
   listTemplates() {
     return this.service.listTemplates()
   }
@@ -39,6 +41,7 @@ export class PostsController {
     description: 'draft는 사용자당 1개다. 이미 있으면 409가 나간다.',
   })
   @ZodResponse({ status: 201, type: PostDto })
+  @ApiErrors(400, 401, 409)
   createDraft(@CurrentUser() userId: string, @Body() body: CreatePostBodyDto) {
     return this.service.createDraft(userId, body.templateId)
   }
@@ -49,6 +52,7 @@ export class PostsController {
     description: '촬영 진입 시 이어쓰기 여부를 정하기 위해 부른다.',
   })
   @ZodResponse({ status: 200, type: PostDto })
+  @ApiErrors(401, 404)
   getDraft(@CurrentUser() userId: string) {
     return this.service.getDraft(userId)
   }
@@ -59,6 +63,7 @@ export class PostsController {
     description: '내 글 + 전체공개 + 친구공개(맞팔)를 최신순으로 준다.',
   })
   @ZodResponse({ status: 200, type: PostPageDto })
+  @ApiErrors(400, 401)
   feed(@CurrentUser() userId: string, @Query() query: CursorQueryDto) {
     return this.service.feed(userId, query)
   }
@@ -69,6 +74,7 @@ export class PostsController {
     description: '본인 id를 넣으면 기록 보관함이 된다. 노출 범위는 피드와 같은 규칙이다.',
   })
   @ZodResponse({ status: 200, type: PostPageDto })
+  @ApiErrors(400, 401)
   listByAuthor(
     @CurrentUser() userId: string,
     @Param('id', new ZodParam(userIdSchema)) id: string,
@@ -80,6 +86,7 @@ export class PostsController {
   @Get('posts/:id/share')
   @ApiOperation({ summary: '공유 링크', description: '비공개 포스트는 공유할 수 없다.' })
   @ZodResponse({ status: 200, type: ShareLinkDto })
+  @ApiErrors(401, 403, 404)
   getShareLink(@CurrentUser() userId: string, @Param('id', new ZodParam(postIdSchema)) id: string) {
     return this.service.getShareLink(userId, id)
   }
@@ -87,6 +94,7 @@ export class PostsController {
   @Get('posts/:id')
   @ApiOperation({ summary: '포스트 상세' })
   @ZodResponse({ status: 200, type: PostDto })
+  @ApiErrors(401, 404)
   getPost(@CurrentUser() userId: string, @Param('id', new ZodParam(postIdSchema)) id: string) {
     return this.service.getPost(userId, id)
   }
@@ -94,6 +102,7 @@ export class PostsController {
   @Patch('posts/:id')
   @ApiOperation({ summary: 'draft 편집', description: 'cuts를 보내면 기존 컷을 전부 대체한다.' })
   @ZodResponse({ status: 200, type: PostDto })
+  @ApiErrors(400, 401, 404)
   updateDraft(
     @CurrentUser() userId: string,
     @Param('id', new ZodParam(postIdSchema)) id: string,
@@ -109,6 +118,7 @@ export class PostsController {
   })
   @ZodResponse({ status: 200, type: PostDto })
   @HttpCode(200)
+  @ApiErrors(400, 401, 404)
   publish(
     @CurrentUser() userId: string,
     @Param('id', new ZodParam(postIdSchema)) id: string,
@@ -123,6 +133,7 @@ export class PostsController {
     description: '소프트 삭제한다. draft를 지우면 새 draft를 만들 수 있다.',
   })
   @HttpCode(204)
+  @ApiErrors(401, 404)
   async remove(
     @CurrentUser() userId: string,
     @Param('id', new ZodParam(postIdSchema)) id: string,

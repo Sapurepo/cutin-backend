@@ -239,11 +239,11 @@ test('검증 실패 details는 어디서 나오든 issue 배열이다', async ()
 })
 
 /**
- * `/users/me`는 `/users/:id`보다 먼저 등록되어야 한다. 이 순서는 appModule의
- * imports 순서에 의존하므로, 모듈을 재배열하면 조용히 깨질 수 있다.
- * 순서가 뒤집히면 `me`가 uuid로 파싱돼 400이 난다.
+ * `/users/me`(users 모듈)와 `/users/:id`(social 모듈)가 같은 자리를 놓고 겹친다.
+ * Fastify는 정적 세그먼트를 파라미터보다 우선하므로 `me`가 uuid로 파싱되지 않는다.
+ * 어댑터를 바꾸면 이 전제가 깨지므로 결과를 고정해 둔다.
  */
-test('/users/me가 /users/{id}보다 먼저 매칭된다', async () => {
+test('/users/me가 /users/{id}로 새지 않는다', async () => {
   const { accessToken } = await login(googleProfile)
 
   const response = await context.app.inject({

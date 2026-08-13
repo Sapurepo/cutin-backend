@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Patch, Post, Put, Query } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { ZodResponse } from 'nestjs-zod'
 import { CurrentUser } from '../../shared/auth/authGuard.ts'
+import { ApiErrors } from '../../shared/errors/apiErrors.ts'
 import {
   NicknameAvailabilityQueryDto,
   NicknameAvailabilityResponseDto,
@@ -21,6 +22,7 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: '내 프로필' })
   @ZodResponse({ status: 200, type: UserProfileDto })
+  @ApiErrors(401)
   getMe(@CurrentUser() userId: string) {
     return this.service.getMe(userId)
   }
@@ -28,6 +30,7 @@ export class UsersController {
   @Get('nickname/availability')
   @ApiOperation({ summary: '닉네임 사용 가능 여부' })
   @ZodResponse({ status: 200, type: NicknameAvailabilityResponseDto })
+  @ApiErrors(400, 401)
   checkNickname(@Query() query: NicknameAvailabilityQueryDto) {
     return this.service.checkNicknameAvailability(query.nickname)
   }
@@ -35,6 +38,7 @@ export class UsersController {
   @Patch('me')
   @ApiOperation({ summary: '내 프로필 수정' })
   @ZodResponse({ status: 200, type: UserProfileDto })
+  @ApiErrors(400, 401, 409)
   updateMe(@CurrentUser() userId: string, @Body() body: UpdateMeBodyDto) {
     return this.service.updateMe(userId, body)
   }
@@ -42,6 +46,7 @@ export class UsersController {
   @Get('me/notification-preferences')
   @ApiOperation({ summary: '알림 선호 시간대 조회' })
   @ZodResponse({ status: 200, type: NotificationPreferencesResponseDto })
+  @ApiErrors(401)
   getPreferences(@CurrentUser() userId: string) {
     return this.service.getPreferences(userId)
   }
@@ -52,6 +57,7 @@ export class UsersController {
     description: '4개 슬롯 중 다중 선택. 리마인더성 푸시만 이 슬롯에 예약된다.',
   })
   @ZodResponse({ status: 200, type: NotificationPreferencesResponseDto })
+  @ApiErrors(400, 401)
   updatePreferences(@CurrentUser() userId: string, @Body() body: NotificationPreferencesBodyDto) {
     return this.service.updatePreferences(userId, body)
   }
@@ -60,6 +66,7 @@ export class UsersController {
   @ApiOperation({ summary: '온보딩 완료' })
   @ZodResponse({ status: 200, type: UserProfileDto })
   @HttpCode(200)
+  @ApiErrors(400, 401)
   completeOnboarding(@CurrentUser() userId: string) {
     return this.service.completeOnboarding(userId)
   }

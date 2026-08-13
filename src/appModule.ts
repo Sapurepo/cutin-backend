@@ -17,8 +17,6 @@ import { AppExceptionFilter } from './shared/errors/appExceptionFilter.ts'
 import { StorageModule } from './shared/storage/storageModule.ts'
 
 @Module({
-  // UsersModule이 SocialModule보다 앞이어야 한다.
-  // `/users/me/...`(정적)가 `/users/:id`(동적)보다 먼저 등록되어야 매칭이 맞다.
   imports: [
     DatabaseModule,
     StorageModule,
