@@ -13,6 +13,8 @@ import { DATABASE, DATABASE_HANDLE } from '../../src/db/databaseModule.ts'
 import { seedTemplates } from '../../src/db/seedTemplates.ts'
 import type { OauthProfile, OauthVerifier } from '../../src/modules/auth/oauthVerifier.ts'
 import { OAUTH_VERIFIER } from '../../src/modules/auth/oauthVerifier.ts'
+import { PUSH } from '../../src/shared/push/pushModule.ts'
+import type { PushMessage, PushResult, PushService } from '../../src/shared/push/pushService.ts'
 import { createLocalDiskStorage } from '../../src/shared/storage/localDiskStorage.ts'
 import { STORAGE } from '../../src/shared/storage/storageModule.ts'
 
@@ -37,11 +39,35 @@ function createOauthVerifierStub(): OauthVerifierStub {
   }
 }
 
+/** 실제로 보내지 않고 무엇을 보냈는지만 모은다. */
+export interface PushServiceStub extends PushService {
+  sent: PushMessage[]
+  invalidTokens: string[]
+  reset(): void
+}
+
+function createPushServiceStub(): PushServiceStub {
+  const stub: PushServiceStub = {
+    sent: [],
+    invalidTokens: [],
+    reset() {
+      stub.sent = []
+      stub.invalidTokens = []
+    },
+    async send(messages: PushMessage[]): Promise<PushResult> {
+      stub.sent.push(...messages)
+      return { sent: messages.length, invalidTokens: stub.invalidTokens }
+    },
+  }
+  return stub
+}
+
 export interface TestContext {
   app: NestFastifyApplication
   container: StartedPostgreSqlContainer
   database: DatabaseHandle
   oauth: OauthVerifierStub
+  push: PushServiceStub
   storageDir: string
 }
 
@@ -57,6 +83,7 @@ export async function createTestContext(): Promise<TestContext> {
 
   const storageDir = await mkdtemp(join(tmpdir(), 'cutin-test-'))
   const oauth = createOauthVerifierStub()
+  const push = createPushServiceStub()
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DATABASE)
@@ -76,6 +103,8 @@ export async function createTestContext(): Promise<TestContext> {
     )
     .overrideProvider(OAUTH_VERIFIER)
     .useValue(oauth)
+    .overrideProvider(PUSH)
+    .useValue(push)
     .compile()
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
@@ -85,7 +114,7 @@ export async function createTestContext(): Promise<TestContext> {
   await app.init()
   await app.getHttpAdapter().getInstance().ready()
 
-  return { app, container, database, oauth, storageDir }
+  return { app, container, database, oauth, push, storageDir }
 }
 
 export async function destroyTestContext(context: TestContext): Promise<void> {

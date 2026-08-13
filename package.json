@@ -33,6 +33,7 @@
     "fastify": "^5.11.3",
     "jose": "^6.2.8",
     "nestjs-zod": "^5.5.0",
+    "pg-boss": "^12.27.0",
     "postgres": "^3.4.9",
     "reflect-metadata": "^0.2.2",
     "zod": "^4.4.3"

@@ -4,7 +4,7 @@ import { encodeCursor, type Page, toPage } from '../../shared/pagination/cursor.
 import type { CursorQuery } from '../../shared/pagination/paginationSchemas.ts'
 import { STORAGE } from '../../shared/storage/storageModule.ts'
 import type { StorageService } from '../../shared/storage/storageService.ts'
-import { NotificationsRepository } from '../notifications/notificationsRepository.ts'
+import { NotificationsService } from '../notifications/notificationsService.ts'
 import { PostsRepository } from '../posts/postsRepository.ts'
 import type { CommentWithAuthor } from './commentsRepository.ts'
 import { CommentsRepository } from './commentsRepository.ts'
@@ -21,7 +21,7 @@ export class CommentsService {
   constructor(
     private readonly repository: CommentsRepository,
     private readonly postsRepository: PostsRepository,
-    private readonly notificationsRepository: NotificationsRepository,
+    private readonly notifications: NotificationsService,
     @Inject(STORAGE) private readonly storage: StorageService,
   ) {}
 
@@ -33,7 +33,7 @@ export class CommentsService {
     }
 
     const comment = await this.repository.create({ postId, authorId: viewerId, body })
-    await this.notificationsRepository.insert({
+    await this.notifications.dispatch({
       userId: post.authorId,
       actorId: viewerId,
       type: 'comment',

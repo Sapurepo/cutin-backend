@@ -1,5 +1,6 @@
 export * from './blocks.ts'
 export * from './comments.ts'
+export * from './devices.ts'
 export * from './follows.ts'
 export * from './friendships.ts'
 export * from './identities.ts'

@@ -8,6 +8,7 @@ import {
   type NotificationType,
   notifications,
   type User,
+  users,
 } from '../../db/schema/index.ts'
 import { decodeCursor } from '../../shared/pagination/cursor.ts'
 
@@ -28,9 +29,19 @@ export class NotificationsRepository {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   /** 자기 행동에 대한 알림은 만들지 않는다. 호출부마다 검사하지 않도록 여기서 거른다. */
-  async insert(input: NotificationInput): Promise<void> {
-    if (input.userId === input.actorId) return
+  async insert(input: NotificationInput): Promise<boolean> {
+    if (input.userId === input.actorId) return false
     await this.db.insert(notifications).values(input)
+    return true
+  }
+
+  /** 푸시 문구에 쓸 행위자 닉네임 */
+  async findNickname(userId: string): Promise<string | null> {
+    const row = await this.db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { nickname: true },
+    })
+    return row?.nickname ?? null
   }
 
   /** 대상이 사라지면 알림도 의미가 없어 함께 지운다. */
