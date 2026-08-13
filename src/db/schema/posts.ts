@@ -1,0 +1,66 @@
+import { sql } from 'drizzle-orm'
+import {
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
+import { media } from './media.ts'
+import { templates } from './templates.ts'
+import { users } from './users.ts'
+
+export const postStatuses = ['draft', 'published', 'deleted'] as const
+export type PostStatus = (typeof postStatuses)[number]
+
+export const postVisibilities = ['friends', 'public', 'private'] as const
+export type PostVisibility = (typeof postVisibilities)[number]
+
+export const posts = pgTable(
+  'posts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    authorId: uuid()
+      .notNull()
+      .references(() => users.id),
+    status: text({ enum: postStatuses }).notNull().default('draft'),
+    templateId: uuid()
+      .notNull()
+      .references(() => templates.id),
+    /** iOS가 만든 합성본. 발행 전에는 없다. */
+    composedMediaId: uuid().references(() => media.id),
+    thumbnailCutIndex: integer(),
+    caption: text(),
+    visibility: text({ enum: postVisibilities }).notNull().default('friends'),
+    publishedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp({ withTimezone: true }),
+  },
+  (table) => [
+    // draft 1개 제한은 애플리케이션이 아니라 이 부분 유니크 인덱스가 강제한다.
+    uniqueIndex('posts_author_draft_idx').on(table.authorId).where(sql`status = 'draft'`),
+    index('posts_author_published_at_idx').on(table.authorId, table.publishedAt),
+    index('posts_published_at_idx').on(table.publishedAt),
+  ],
+)
+
+export const postCuts = pgTable(
+  'post_cuts',
+  {
+    postId: uuid()
+      .notNull()
+      .references(() => posts.id),
+    cutIndex: integer().notNull(),
+    mediaId: uuid()
+      .notNull()
+      .references(() => media.id),
+  },
+  (table) => [primaryKey({ columns: [table.postId, table.cutIndex] })],
+)
+
+export type Post = typeof posts.$inferSelect
+export type PostCut = typeof postCuts.$inferSelect
