@@ -5,7 +5,8 @@ CUTIN 서비스의 API 서버. iOS 네이티브 앱과 Next.js 어드민이 함�
 기능 명세는 [`CUTIN-FEATURES.md`](./CUTIN-FEATURES.md), 아키텍처·코딩 규약은
 [`CLAUDE.md`](./CLAUDE.md)를 참고한다.
 
-**스택:** Fastify 5 · TypeScript(ESM) · Zod · Drizzle · PostgreSQL 16 · pg-boss · Vitest · Biome
+**스택:** NestJS 11(Fastify 어댑터) · TypeScript 5.9(ESM) · Zod · Drizzle · PostgreSQL 16 ·
+pg-boss · Vitest · Biome
 
 ## 시작하기
 

@@ -211,3 +211,47 @@ test('토큰 없이 보호된 라우트에 접근하면 401', async () => {
   expect(response.statusCode).toBe(401)
   expect(response.json().error.code).toBe('UNAUTHORIZED')
 })
+
+/**
+ * 검증 실패의 `details`는 경로 파라미터(ZodParam)·본문·쿼리(전역 파이프)가
+ * 서로 다른 경로로 만들어진다. 클라이언트가 한 가지로만 파싱하도록 모양을 맞춰둔다.
+ */
+test('검증 실패 details는 어디서 나오든 issue 배열이다', async () => {
+  const { accessToken } = await login(googleProfile)
+  const headers = { authorization: `Bearer ${accessToken}` }
+
+  const responses = [
+    await context.app.inject({ method: 'GET', url: '/posts/not-a-uuid', headers }),
+    await context.app.inject({
+      method: 'POST',
+      url: '/posts',
+      headers,
+      payload: { templateId: 'not-a-uuid' },
+    }),
+    await context.app.inject({ method: 'GET', url: '/users/search', headers }),
+  ]
+
+  for (const response of responses) {
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.code).toBe('VALIDATION_FAILED')
+    expect(Array.isArray(response.json().error.details)).toBe(true)
+  }
+})
+
+/**
+ * `/users/me`는 `/users/:id`보다 먼저 등록되어야 한다. 이 순서는 appModule의
+ * imports 순서에 의존하므로, 모듈을 재배열하면 조용히 깨질 수 있다.
+ * 순서가 뒤집히면 `me`가 uuid로 파싱돼 400이 난다.
+ */
+test('/users/me가 /users/{id}보다 먼저 매칭된다', async () => {
+  const { accessToken } = await login(googleProfile)
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/users/me',
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+
+  expect(response.statusCode).toBe(200)
+  expect(response.json()).toMatchObject({ id: userIdOf(accessToken), onboardingCompleted: false })
+})

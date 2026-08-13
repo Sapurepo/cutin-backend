@@ -1,7 +1,7 @@
 import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { postStatuses, postVisibilities } from '../../db/schema/index.ts'
-import { cursorQuerySchema, pageSchema } from '../../shared/pagination/paginationSchemas.ts'
+import { pageSchema } from '../../shared/pagination/paginationSchemas.ts'
 import { mediaSchema } from '../media/mediaSchemas.ts'
 import { reactionSummarySchema } from '../reactions/reactionsSchemas.ts'
 
@@ -88,8 +88,6 @@ export const postPageSchema = pageSchema(postSchema)
 export const shareLinkSchema = z.object({
   url: z.string(),
 })
-
-export const feedQuerySchema = cursorQuerySchema
 
 export class TemplatesResponseDto extends createZodDto(templatesResponseSchema) {}
 export class CreatePostBodyDto extends createZodDto(createPostBodySchema) {}

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common'
 import type { FastifyReply } from 'fastify'
 import { ZodValidationException } from 'nestjs-zod'
+import { ZodError } from 'zod'
 import { AppError } from './appError.ts'
 import type { ErrorResponse } from './errorSchemas.ts'
 
@@ -41,7 +42,7 @@ export class AppExceptionFilter implements ExceptionFilter {
       }
     }
 
-    // nestjs-zod는 BadRequestException을 던지므로 AppError보다 먼저 걸러야 한다.
+    // nestjs-zod는 BadRequestException을 던지므로 HttpException 분기보다 먼저 걸러야 한다.
     if (exception instanceof ZodValidationException) {
       return {
         status: 400,
@@ -49,7 +50,9 @@ export class AppExceptionFilter implements ExceptionFilter {
           error: {
             code: 'VALIDATION_FAILED',
             message: '요청 값이 올바르지 않습니다.',
-            details: exception.getZodError(),
+            // `ZodParam`이 내는 것과 같은 모양(issue 배열)으로 맞춘다.
+            // 클라이언트가 details를 한 가지로만 파싱하게 하기 위해서다.
+            details: toIssues(exception.getZodError()),
           },
         },
       }
@@ -58,18 +61,25 @@ export class AppExceptionFilter implements ExceptionFilter {
     // Nest가 직접 던지는 예외(경로 없음 등). 메시지가 영문이라 우리 어휘로 바꾼다.
     if (exception instanceof HttpException) {
       const status = exception.getStatus()
+      // 5xx는 응답 직렬화 실패 같은 서버 버그다. 메시지를 흘리지 않고 로그로 남긴다.
+      if (status >= 500) return this.internalError(exception)
+
       const fallback = fallbacks[status]
       return {
         status,
         body: {
           error: {
-            code: fallback?.code ?? (status < 500 ? 'BAD_REQUEST' : 'INTERNAL_ERROR'),
+            code: fallback?.code ?? 'BAD_REQUEST',
             message: fallback?.message ?? exception.message,
           },
         },
       }
     }
 
+    return this.internalError(exception)
+  }
+
+  private internalError(exception: unknown): { status: number; body: ErrorResponse } {
     this.logger.error(
       '처리되지 않은 오류',
       exception instanceof Error ? exception.stack : exception,
@@ -81,6 +91,10 @@ export class AppExceptionFilter implements ExceptionFilter {
       },
     }
   }
+}
+
+function toIssues(error: unknown): unknown {
+  return error instanceof ZodError ? error.issues : error
 }
 
 const fallbacks: Record<number, { code: string; message: string }> = {

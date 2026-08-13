@@ -24,4 +24,8 @@ jobs:
 
       - run: pnpm typecheck
 
+      # 데코레이터 메타데이터 방출은 tsc 빌드에서만 검증된다.
+      # typecheck(noEmit)로는 산출물이 깨진 것을 잡지 못한다.
+      - run: pnpm build
+
       - run: pnpm test
