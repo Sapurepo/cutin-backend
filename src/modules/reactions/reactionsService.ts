@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { ReactionType } from '../../db/schema/index.ts'
 import { AppError } from '../../shared/errors/appError.ts'
-import { NotificationsRepository } from '../notifications/notificationsRepository.ts'
+import { NotificationsService } from '../notifications/notificationsService.ts'
 import { PostsRepository } from '../posts/postsRepository.ts'
 import { ReactionsRepository } from './reactionsRepository.ts'
 
@@ -10,7 +10,7 @@ export class ReactionsService {
   constructor(
     private readonly repository: ReactionsRepository,
     private readonly postsRepository: PostsRepository,
-    private readonly notificationsRepository: NotificationsRepository,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** 같은 종류를 다시 누르면 취소, 다른 종류면 교체된다. */
@@ -20,16 +20,16 @@ export class ReactionsService {
 
     if (existing?.type === type) {
       await this.repository.remove(postId, viewerId)
-      await this.notificationsRepository.removeByTarget('reaction', postId, viewerId)
+      await this.notifications.removeByTarget('reaction', postId, viewerId)
       return this.summarize(postId, viewerId)
     }
 
     await this.repository.upsert(postId, viewerId, type)
     // 종류를 바꾼 경우 알림이 두 줄 쌓이지 않도록 이전 것을 지우고 다시 넣는다.
-    await this.notificationsRepository.removeByTarget('reaction', postId, viewerId)
+    await this.notifications.removeByTarget('reaction', postId, viewerId)
     const post = await this.postsRepository.findPost(postId)
     if (post !== undefined) {
-      await this.notificationsRepository.insert({
+      await this.notifications.dispatch({
         userId: post.authorId,
         actorId: viewerId,
         type: 'reaction',
@@ -43,7 +43,7 @@ export class ReactionsService {
   async remove(viewerId: string, postId: string) {
     await this.requireVisiblePost(viewerId, postId)
     await this.repository.remove(postId, viewerId)
-    await this.notificationsRepository.removeByTarget('reaction', postId, viewerId)
+    await this.notifications.removeByTarget('reaction', postId, viewerId)
     return this.summarize(postId, viewerId)
   }
 

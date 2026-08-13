@@ -4,13 +4,11 @@ import { AppError } from '../../shared/errors/appError.ts'
 import { STORAGE } from '../../shared/storage/storageModule.ts'
 import type { StorageService } from '../../shared/storage/storageService.ts'
 import { MediaRepository } from '../media/mediaRepository.ts'
+import { defaultSlots } from '../notifications/slotSchedule.ts'
 import { containsForbiddenWord } from './nicknamePolicy.ts'
 import type { UpdatableUserFields, UserWithAvatar } from './usersRepository.ts'
 import { UsersRepository } from './usersRepository.ts'
 import { nicknameSchema } from './usersSchemas.ts'
-
-/** 슬롯을 미선택한 사용자에게 적용하는 기본값 (명세 §3.3) */
-const defaultSlots: NotificationSlot[] = ['morning']
 
 export interface UserProfile {
   id: string

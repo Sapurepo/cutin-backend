@@ -4,7 +4,7 @@ import type { Page } from '../../shared/pagination/cursor.ts'
 import type { CursorQuery } from '../../shared/pagination/paginationSchemas.ts'
 import { STORAGE } from '../../shared/storage/storageModule.ts'
 import type { StorageService } from '../../shared/storage/storageService.ts'
-import { NotificationsRepository } from '../notifications/notificationsRepository.ts'
+import { NotificationsService } from '../notifications/notificationsService.ts'
 import type { PublicUserRow, UserWithAvatar } from './socialRepository.ts'
 import { SocialRepository } from './socialRepository.ts'
 
@@ -26,7 +26,7 @@ export interface PublicProfile extends PublicUser {
 export class SocialService {
   constructor(
     private readonly repository: SocialRepository,
-    private readonly notificationsRepository: NotificationsRepository,
+    private readonly notifications: NotificationsService,
     @Inject(STORAGE) private readonly storage: StorageService,
   ) {}
 
@@ -39,7 +39,7 @@ export class SocialService {
       throw AppError.forbidden('BLOCKED', '차단한 사용자는 팔로우할 수 없습니다.')
     }
     const { friend } = await this.repository.follow(viewerId, targetId)
-    await this.notificationsRepository.insert({
+    await this.notifications.dispatch({
       userId: targetId,
       actorId: viewerId,
       type: 'follow',
