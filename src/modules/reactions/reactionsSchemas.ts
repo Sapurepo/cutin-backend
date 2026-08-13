@@ -1,3 +1,4 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { reactionTypes } from '../../db/schema/index.ts'
 
@@ -16,3 +17,6 @@ export const reactionSummarySchema = z.object({
   /** 내가 누른 반응. 없으면 null */
   mine: z.enum(reactionTypes).nullable(),
 })
+
+export class PutReactionBodyDto extends createZodDto(putReactionBodySchema) {}
+export class ReactionSummaryDto extends createZodDto(reactionSummarySchema) {}

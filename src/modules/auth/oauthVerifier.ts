@@ -10,6 +10,9 @@ export interface OauthProfile {
   email: string | null
 }
 
+/** 테스트가 프로바이더 응답을 스텁하기 위한 주입점 */
+export const OAUTH_VERIFIER = Symbol('OAUTH_VERIFIER')
+
 /** iOS SDK가 받아온 토큰을 서버가 프로바이더에 되물어 검증한다. */
 export interface OauthVerifier {
   verify(provider: OauthProvider, token: string): Promise<OauthProfile>

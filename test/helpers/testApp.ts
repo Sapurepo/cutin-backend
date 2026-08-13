@@ -1,14 +1,20 @@
+import 'reflect-metadata'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
+import { Test } from '@nestjs/testing'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
-import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../../src/app.ts'
+import { AppModule } from '../../src/appModule.ts'
+import { applyFastifySetup } from '../../src/appSetup.ts'
 import { createDatabase, type DatabaseHandle } from '../../src/db/client.ts'
+import { DATABASE, DATABASE_HANDLE } from '../../src/db/databaseModule.ts'
 import { seedTemplates } from '../../src/db/seedTemplates.ts'
 import type { OauthProfile, OauthVerifier } from '../../src/modules/auth/oauthVerifier.ts'
+import { OAUTH_VERIFIER } from '../../src/modules/auth/oauthVerifier.ts'
 import { createLocalDiskStorage } from '../../src/shared/storage/localDiskStorage.ts'
+import { STORAGE } from '../../src/shared/storage/storageModule.ts'
 
 /**
  * 프로바이더 호출 없이 로그인 플로우를 돌리기 위한 스텁.
@@ -32,7 +38,7 @@ function createOauthVerifierStub(): OauthVerifierStub {
 }
 
 export interface TestContext {
-  app: FastifyInstance
+  app: NestFastifyApplication
   container: StartedPostgreSqlContainer
   database: DatabaseHandle
   oauth: OauthVerifierStub
@@ -51,12 +57,34 @@ export async function createTestContext(): Promise<TestContext> {
 
   const storageDir = await mkdtemp(join(tmpdir(), 'cutin-test-'))
   const oauth = createOauthVerifierStub()
-  const app = await buildApp({
-    db: database.db,
-    oauthVerifier: oauth,
-    storage: createLocalDiskStorage({ directory: storageDir, baseUrl: 'http://test.local' }),
+
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(DATABASE)
+    .useValue(database.db)
+    // 커넥션 수명은 테스트가 직접 관리한다. 앱이 닫지 않도록 no-op 핸들을 준다.
+    .overrideProvider(DATABASE_HANDLE)
+    .useValue({
+      db: database.db,
+      close: async () => {},
+    } satisfies DatabaseHandle)
+    .overrideProvider(STORAGE)
+    .useValue(
+      createLocalDiskStorage({
+        directory: storageDir,
+        baseUrl: 'http://test.local',
+      }),
+    )
+    .overrideProvider(OAUTH_VERIFIER)
+    .useValue(oauth)
+    .compile()
+
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+    logger: false,
   })
-  await app.ready()
+  applyFastifySetup(app)
+  await app.init()
+  await app.getHttpAdapter().getInstance().ready()
+
   return { app, container, database, oauth, storageDir }
 }
 

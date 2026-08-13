@@ -211,3 +211,47 @@ test('토큰 없이 보호된 라우트에 접근하면 401', async () => {
   expect(response.statusCode).toBe(401)
   expect(response.json().error.code).toBe('UNAUTHORIZED')
 })
+
+/**
+ * 검증 실패의 `details`는 경로 파라미터(ZodParam)·본문·쿼리(전역 파이프)가
+ * 서로 다른 경로로 만들어진다. 클라이언트가 한 가지로만 파싱하도록 모양을 맞춰둔다.
+ */
+test('검증 실패 details는 어디서 나오든 issue 배열이다', async () => {
+  const { accessToken } = await login(googleProfile)
+  const headers = { authorization: `Bearer ${accessToken}` }
+
+  const responses = [
+    await context.app.inject({ method: 'GET', url: '/posts/not-a-uuid', headers }),
+    await context.app.inject({
+      method: 'POST',
+      url: '/posts',
+      headers,
+      payload: { templateId: 'not-a-uuid' },
+    }),
+    await context.app.inject({ method: 'GET', url: '/users/search', headers }),
+  ]
+
+  for (const response of responses) {
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.code).toBe('VALIDATION_FAILED')
+    expect(Array.isArray(response.json().error.details)).toBe(true)
+  }
+})
+
+/**
+ * `/users/me`(users 모듈)와 `/users/:id`(social 모듈)가 같은 자리를 놓고 겹친다.
+ * Fastify는 정적 세그먼트를 파라미터보다 우선하므로 `me`가 uuid로 파싱되지 않는다.
+ * 어댑터를 바꾸면 이 전제가 깨지므로 결과를 고정해 둔다.
+ */
+test('/users/me가 /users/{id}로 새지 않는다', async () => {
+  const { accessToken } = await login(googleProfile)
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/users/me',
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+
+  expect(response.statusCode).toBe(200)
+  expect(response.json()).toMatchObject({ id: userIdOf(accessToken), onboardingCompleted: false })
+})

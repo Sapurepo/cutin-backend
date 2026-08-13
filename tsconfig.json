@@ -8,10 +8,15 @@
 
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
+
+    // NestJS DI가 런타임에 읽는 design:paramtypes 메타데이터를 남긴다.
+    // 이 때문에 erasableSyntaxOnly와 verbatimModuleSyntax는 쓸 수 없다 —
+    // 데코레이터·파라미터 프로퍼티는 지울 수 없는 문법이고,
+    // 생성자 인자 타입을 `import type`으로 들여오면 메타데이터가 비어 주입이 깨진다.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

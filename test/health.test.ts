@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'vitest'
+import { buildOpenapiDocument } from '../src/openapi.ts'
 import { createTestContext, destroyTestContext, type TestContext } from './helpers/testApp.ts'
 
 let context: TestContext
@@ -28,7 +29,7 @@ test('없는 경로는 통일된 오류 형태로 404를 반환한다', async ()
 })
 
 test('OpenAPI 스펙에 라우트가 등록된다', () => {
-  const spec = context.app.swagger() as { paths: Record<string, unknown> }
+  const spec = buildOpenapiDocument(context.app)
 
   expect(spec.paths['/health']).toBeDefined()
 })

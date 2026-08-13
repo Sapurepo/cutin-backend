@@ -1,3 +1,4 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { mediaKinds } from '../../db/schema/index.ts'
 
@@ -29,6 +30,7 @@ export const mediaSchema = z.object({
   height: z.number().int().nullable(),
 })
 
-export const mediaIdParamsSchema = z.object({ id: z.uuid() })
-
-export const storageKeyParamsSchema = z.object({ '*': z.string().min(1) })
+export class CreateUploadBodyDto extends createZodDto(createUploadBodySchema) {}
+export class UploadTargetDto extends createZodDto(uploadTargetSchema) {}
+export class CompleteUploadBodyDto extends createZodDto(completeUploadBodySchema) {}
+export class MediaDto extends createZodDto(mediaSchema) {}

@@ -111,6 +111,32 @@ test('업로드는 바이트가 도착해야 완료 처리된다', async () => {
   expect(fetched.rawPayload.equals(pngBytes)).toBe(true)
 })
 
+/**
+ * 업로드 상한(15MB)은 Fastify 본문 파서 옵션이 강제한다.
+ * 어댑터가 FST_ERR_* 코드를 버리므로 상태 코드로만 구분되는데,
+ * 사용자에게 보여줄 문구가 달린 자리라 code를 고정해 둔다.
+ */
+test('상한을 넘는 업로드는 413으로 막힌다', async () => {
+  const alice = await createUser('alice')
+  const created = await context.app.inject({
+    method: 'POST',
+    url: '/media/uploads',
+    headers: alice.headers,
+    payload: { kind: 'cut', mime: 'image/png' },
+  })
+  const { url } = created.json() as { url: string }
+
+  const response = await context.app.inject({
+    method: 'PUT',
+    url: new URL(url).pathname,
+    headers: { ...alice.headers, 'content-type': 'image/png' },
+    payload: Buffer.alloc(16 * 1024 * 1024),
+  })
+
+  expect(response.statusCode).toBe(413)
+  expect(response.json().error.code).toBe('PAYLOAD_TOO_LARGE')
+})
+
 test('컷이 덜 찼거나 합성본이 없으면 발행되지 않는다', async () => {
   const alice = await createUser('alice')
   const template = await firstTemplate(alice)

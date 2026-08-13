@@ -1,3 +1,4 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { reportReasons, reportStatuses, reportTargetTypes } from '../../db/schema/index.ts'
 
@@ -16,3 +17,6 @@ export const reportSchema = z.object({
   status: z.enum(reportStatuses),
   createdAt: z.string(),
 })
+
+export class CreateReportBodyDto extends createZodDto(createReportBodySchema) {}
+export class ReportDto extends createZodDto(reportSchema) {}

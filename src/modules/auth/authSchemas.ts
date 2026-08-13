@@ -1,9 +1,6 @@
+import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { oauthProviders } from '../../db/schema/index.ts'
-
-export const oauthLoginParamsSchema = z.object({
-  provider: z.enum(oauthProviders),
-})
 
 export const oauthLoginBodySchema = z.object({
   /** 구글은 id_token, 카카오는 access_token */
@@ -23,3 +20,10 @@ export const tokensResponseSchema = z.object({
 export const loginResponseSchema = tokensResponseSchema.extend({
   onboardingCompleted: z.boolean(),
 })
+
+export const oauthProviderSchema = z.enum(oauthProviders)
+
+export class OauthLoginBodyDto extends createZodDto(oauthLoginBodySchema) {}
+export class RefreshBodyDto extends createZodDto(refreshBodySchema) {}
+export class TokensResponseDto extends createZodDto(tokensResponseSchema) {}
+export class LoginResponseDto extends createZodDto(loginResponseSchema) {}
