@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+openapi.json
+# 로컬 디스크 스토리지의 업로드 파일. 앞의 슬래시가 없으면 src/shared/storage/까지 무시된다.
+/storage/
+*.log
+.DS_Store
