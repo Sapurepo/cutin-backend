@@ -254,3 +254,47 @@ test('purge는 보존 기간이 지난 소프트 삭제만 지운다', async () 
   const purged = await retentionJob().purge(now)
   expect(purged.posts).toBe(1)
 })
+
+/**
+ * 댓글·반응·보관이 달린 포스트도 purge돼야 한다.
+ * posts를 참조하는 테이블이 전부 ON DELETE NO ACTION이라, 참조 행을 먼저 지우지 않으면
+ * FK 위반으로 잡 전체가 실패한다. P5 테스트는 참조가 없는 포스트만 봐서 놓쳤다.
+ */
+test('참조가 달린 포스트도 purge된다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+  await makeFriends(alice, bob)
+  const postId = await publishPost(alice, 'friends')
+
+  await context.app.inject({
+    method: 'POST',
+    url: `/posts/${postId}/comments`,
+    headers: bob.headers,
+    payload: { body: '좋다' },
+  })
+  await context.app.inject({
+    method: 'PUT',
+    url: `/posts/${postId}/reaction`,
+    headers: bob.headers,
+    payload: { type: 'like' },
+  })
+  await context.app.inject({
+    method: 'PUT',
+    url: `/posts/${postId}/bookmark`,
+    headers: bob.headers,
+  })
+
+  await context.app.inject({
+    method: 'DELETE',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+  })
+  await context.database.db
+    .update(posts)
+    .set({ deletedAt: new Date('2025-08-11T00:00:00Z') })
+    .where(sql`${posts.id} = ${postId}::uuid`)
+
+  const purged = await retentionJob().purge(new Date('2026-08-13T00:00:00Z'))
+
+  expect(purged.posts).toBe(1)
+})

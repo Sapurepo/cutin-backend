@@ -10,6 +10,7 @@ import { AppModule } from '../../src/appModule.ts'
 import { applyFastifySetup } from '../../src/appSetup.ts'
 import { createDatabase, type DatabaseHandle } from '../../src/db/client.ts'
 import { DATABASE, DATABASE_HANDLE } from '../../src/db/databaseModule.ts'
+import { seedFrames } from '../../src/db/seedFrames.ts'
 import { seedTemplates } from '../../src/db/seedTemplates.ts'
 import type { OauthProfile, OauthVerifier } from '../../src/modules/auth/oauthVerifier.ts'
 import { OAUTH_VERIFIER } from '../../src/modules/auth/oauthVerifier.ts'
@@ -80,6 +81,7 @@ export async function createTestContext(): Promise<TestContext> {
   const database = createDatabase(container.getConnectionUri())
   await migrate(database.db, { migrationsFolder: 'src/db/migrations' })
   await seedTemplates(database.db)
+  await seedFrames(database.db)
 
   const storageDir = await mkdtemp(join(tmpdir(), 'cutin-test-'))
   const oauth = createOauthVerifierStub()

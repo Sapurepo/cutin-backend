@@ -4,6 +4,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod'
 import { DatabaseModule } from './db/databaseModule.ts'
 import { JobsModule } from './jobs/jobsModule.ts'
 import { AuthModule } from './modules/auth/authModule.ts'
+import { BookmarksModule } from './modules/bookmarks/bookmarksModule.ts'
 import { CommentsModule } from './modules/comments/commentsModule.ts'
 import { DevicesModule } from './modules/devices/devicesModule.ts'
 import { HealthModule } from './modules/health/healthModule.ts'
@@ -32,6 +33,7 @@ import { StorageModule } from './shared/storage/storageModule.ts'
     SocialModule,
     CommentsModule,
     ReactionsModule,
+    BookmarksModule,
     NotificationsModule,
     ReportsModule,
     DevicesModule,

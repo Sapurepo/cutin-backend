@@ -342,3 +342,121 @@ test('아바타를 올리면 프로필과 포스트 작성자에 함께 반영�
   })
   expect((detail.json() as { author: { avatarUrl: string } }).author.avatarUrl).toBe(avatarUrl)
 })
+
+test('템플릿 8종이 내려오고 격자가 아닌 레이아웃도 표현된다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/templates',
+    headers: alice.headers,
+  })
+  const { items } = response.json() as {
+    items: { code: string; cutCount: number; aspectRatio: string; slots: unknown[] }[]
+  }
+
+  expect(items.map((item) => item.code)).toEqual([
+    'single',
+    'strip2',
+    'pair2',
+    'grid4',
+    'strip4',
+    'strip4wide',
+    'bigLeft',
+    'grid6',
+  ])
+
+  // 두 컷은 세로(1:2)와 가로(2:1) 둘 다 있다.
+  expect(items.find((item) => item.code === 'strip2')?.aspectRatio).toBe('1:2')
+  expect(items.find((item) => item.code === 'pair2')?.aspectRatio).toBe('2:1')
+
+  // 격자로 떨어지지 않는 bigLeft도 cutCount가 자리 개수와 맞는다.
+  const bigLeft = items.find((item) => item.code === 'bigLeft')
+  expect(bigLeft?.cutCount).toBe(4)
+  expect(bigLeft?.slots).toHaveLength(4)
+  expect(bigLeft?.slots[0]).toMatchObject({ x: 0, y: 0, height: 1 })
+})
+
+test('프레임 8종이 비율값으로 내려온다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/frames',
+    headers: alice.headers,
+  })
+  expect(response.statusCode).toBe(200)
+  const { items } = response.json() as {
+    items: { code: string; padding: number; footer: string | null }[]
+  }
+
+  expect(items).toHaveLength(8)
+  expect(items[0]?.code).toBe('basic')
+  // basic만 푸터가 없다.
+  expect(items.filter((item) => item.footer === null).map((item) => item.code)).toEqual(['basic'])
+  // 길이는 캔버스 폭 대비 비율이므로 숫자여야 한다 (numeric이면 문자열로 나온다).
+  expect(typeof items[0]?.padding).toBe('number')
+  expect(items[0]?.padding).toBeLessThan(1)
+})
+
+test('draft에 프레임을 붙이면 포스트에 실린다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const frames = await context.app.inject({
+    method: 'GET',
+    url: '/frames',
+    headers: alice.headers,
+  })
+  const noir = (frames.json() as { items: { id: string; code: string }[] }).items.find(
+    (item) => item.code === 'noir',
+  )
+
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+  expect(draft.json().frame).toBeNull()
+
+  const patched = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: noir?.id },
+  })
+  expect(patched.statusCode).toBe(200)
+  expect(patched.json().frame).toMatchObject({ code: 'noir', background: '#111113' })
+
+  // null을 보내면 기본 외형으로 되돌아간다.
+  const cleared = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: null },
+  })
+  expect(cleared.json().frame).toBeNull()
+})
+
+test('없는 프레임은 400으로 막는다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+
+  const response = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: '11111111-1111-4111-8111-111111111111' },
+  })
+
+  expect(response.statusCode).toBe(400)
+  expect(response.json().error.code).toBe('FRAME_NOT_FOUND')
+})

@@ -1,5 +1,6 @@
 import { relations } from 'drizzle-orm'
 import { comments } from './comments.ts'
+import { frames } from './frames.ts'
 import { media } from './media.ts'
 import { notifications } from './notifications.ts'
 import { postCuts, posts } from './posts.ts'
@@ -13,6 +14,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.templateId],
     references: [templates.id],
   }),
+  frame: one(frames, { fields: [posts.frameId], references: [frames.id] }),
   composed: one(media, {
     fields: [posts.composedMediaId],
     references: [media.id],
