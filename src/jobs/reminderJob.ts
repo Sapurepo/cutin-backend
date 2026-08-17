@@ -36,6 +36,7 @@ export class ReminderJob {
 
       messages.push({
         pushToken: target.pushToken,
+        pushEnvironment: target.pushEnvironment,
         title: REMINDER_TITLE,
         body: REMINDER_BODY,
         data: { slot: opening },

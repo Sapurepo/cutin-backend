@@ -8,6 +8,7 @@ import {
   devices,
   type NotificationSlot,
   notificationPreferences,
+  type PushEnvironment,
   users,
 } from '../../db/schema/index.ts'
 
@@ -15,6 +16,7 @@ import {
 export interface ReminderTarget {
   userId: string
   pushToken: string
+  pushEnvironment: PushEnvironment
   timezone: string
   /** 사용자가 고른 슬롯. 설정 행이 없으면 null이고 호출부가 기본값을 적용한다. */
   slots: NotificationSlot[] | null
@@ -29,6 +31,7 @@ export class DevicesRepository {
     userId: string
     platform: DevicePlatform
     pushToken: string
+    pushEnvironment: PushEnvironment
     timezone: string
   }): Promise<Device> {
     const [row] = await this.db
@@ -39,6 +42,8 @@ export class DevicesRepository {
         set: {
           userId: values.userId,
           platform: values.platform,
+          // 빠뜨리면 같은 토큰이 다른 환경으로 재등록될 때 옛 값이 남는다.
+          pushEnvironment: values.pushEnvironment,
           timezone: values.timezone,
           revokedAt: null,
           updatedAt: new Date(),
@@ -76,6 +81,7 @@ export class DevicesRepository {
       .select({
         userId: devices.userId,
         pushToken: devices.pushToken,
+        pushEnvironment: devices.pushEnvironment,
         timezone: devices.timezone,
         slots: notificationPreferences.slots,
       })
@@ -93,9 +99,11 @@ export class DevicesRepository {
   }
 
   /** 즉시 알림을 보낼 대상. 폐기되지 않고 푸시가 켜진 디바이스만. */
-  listActiveTokens(userId: string): Promise<{ pushToken: string }[]> {
+  listActiveTokens(
+    userId: string,
+  ): Promise<{ pushToken: string; pushEnvironment: PushEnvironment }[]> {
     return this.db
-      .select({ pushToken: devices.pushToken })
+      .select({ pushToken: devices.pushToken, pushEnvironment: devices.pushEnvironment })
       .from(devices)
       .leftJoin(notificationPreferences, eq(notificationPreferences.userId, devices.userId))
       .where(

@@ -23,12 +23,17 @@ beforeEach(async () => {
   context.push.reset()
 })
 
-function registerDevice(user: TestUser, timezone: string, pushToken: string) {
+function registerDevice(
+  user: TestUser,
+  timezone: string,
+  pushToken: string,
+  pushEnvironment: 'sandbox' | 'production' = 'production',
+) {
   return context.app.inject({
     method: 'POST',
     url: '/devices',
     headers: user.headers,
-    payload: { platform: 'ios', pushToken, timezone },
+    payload: { platform: 'ios', pushToken, pushEnvironment, timezone },
   })
 }
 
@@ -64,11 +69,61 @@ test('올바르지 않은 타임존은 거절한다', async () => {
     method: 'POST',
     url: '/devices',
     headers: alice.headers,
-    payload: { platform: 'ios', pushToken: 'token-x', timezone: 'Mars/Olympus' },
+    payload: {
+      platform: 'ios',
+      pushToken: 'token-x',
+      pushEnvironment: 'production',
+      timezone: 'Mars/Olympus',
+    },
   })
 
   expect(response.statusCode).toBe(400)
   expect(response.json().error.code).toBe('VALIDATION_FAILED')
+})
+
+/**
+ * 선택 항목이었다면 클라이언트가 안 보낸 디바이스가 조용히 production으로 등록되고
+ * sandbox 빌드의 푸시가 전부 실패한다. 원인이 안 드러나는 실패보다 400이 낫다.
+ */
+test('pushEnvironment 없이는 디바이스를 등록할 수 없다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'POST',
+    url: '/devices',
+    headers: alice.headers,
+    payload: { platform: 'ios', pushToken: 'token-x', timezone: 'Asia/Seoul' },
+  })
+
+  expect(response.statusCode).toBe(400)
+  expect(response.json().error.code).toBe('VALIDATION_FAILED')
+})
+
+/**
+ * APNs 토큰은 한 환경에서만 유효하므로 발송 대상마다 환경이 따라가야 한다.
+ * 같은 토큰이 다른 환경으로 재등록되면 upsert가 값을 갱신해야 한다 —
+ * `set` 절에서 빠뜨리면 옛 환경이 남아 조용히 잘못된 엔드포인트로 나간다.
+ */
+test('디바이스 환경이 푸시 메시지까지 따라간다', async () => {
+  const alice = await createUser('alice')
+  await registerDevice(alice, 'Asia/Seoul', 'token-1', 'sandbox')
+  await setSlots(alice, ['morning'])
+
+  // 2026-08-13T23:05Z → 서울 08:05, 아침 슬롯이 열린다.
+  await reminderJob().run(new Date('2026-08-13T23:05:00Z'))
+  expect(context.push.sent).toHaveLength(1)
+  expect(context.push.sent[0]).toMatchObject({
+    pushToken: 'token-1',
+    pushEnvironment: 'sandbox',
+  })
+
+  // 같은 토큰을 production으로 다시 등록하면 갱신돼야 한다.
+  const again = await registerDevice(alice, 'Asia/Seoul', 'token-1', 'production')
+  expect(again.json().pushEnvironment).toBe('production')
+
+  context.push.reset()
+  await reminderJob().run(new Date('2026-08-13T23:05:00Z'))
+  expect(context.push.sent[0]).toMatchObject({ pushEnvironment: 'production' })
 })
 
 /**
