@@ -290,8 +290,12 @@ S3_SECRET_ACCESS_KEY=                              # GCS HMAC 시크릿
   **이미 정해진 "추측 불가 키 + 퍼블릭 읽기" 정책의 반전**이므로 별개 결정으로 다룬다
 - 업로드 베이스(`PUBLIC_BASE_URL`)와 미디어 베이스(`MEDIA_BASE_URL`)가 분리돼 있고,
   테스트가 둘을 다른 도메인으로 돌려 분리가 깨지지 않는지 검증한다
-- `@fastify/static` 의존성을 제거했다 — 어디서도 import되지 않는 데다, 미디어를 CDN이 서비스하는 이상
-  "앱이 정적 파일을 서브한다"는 전제는 죽었다. 남겨두면 다음 사람이 이걸 근거로 잘못 설계한다
+- ⚠️ **`@fastify/static`은 미사용처럼 보이지만 지우면 안 된다.** 소스 어디에서도 import하지 않아
+  한 번 제거했다가 앱이 부팅에 실패했다. `main.ts`의 `setupOpenapi`가 부르는 `SwaggerModule.setup`이
+  `/docs` UI를 서빙하려고 런타임에 로드한다 (`PackageLoader`가 없으면 에러를 던진다).
+  **테스트는 이 경로를 타지 않는다** — `test/helpers/testApp.ts`가 `setupOpenapi`를 부르지 않아
+  lint·typecheck·test가 전부 통과한 채로 앱만 죽는다. 의존성을 건드렸으면 `pnpm dev`로 실제 부팅을 본다.
+  (미디어를 CDN이 서비스하므로 **앱이 미디어 파일을 서브하지는 않는다**. 이건 Swagger UI 자산 얘기다)
 
 ---
 
