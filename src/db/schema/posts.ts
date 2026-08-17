@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  boolean,
   index,
   integer,
   pgTable,
@@ -39,6 +40,11 @@ export const posts = pgTable(
     /** iOS가 만든 합성본. 발행 전에는 없다. */
     composedMediaId: uuid().references(() => media.id),
     thumbnailCutIndex: integer(),
+    /**
+     * 프로필 그리드 맨 앞 고정(iOS §6.3). 대표 컷과 별개의 값이다 — 0.3.0은 "대표 컷을 직접 지정하면
+     * 고정"으로 묶었는데, 발행 시 미지정을 0으로 채우면서 "지정 안 함"이 사라져 전부 고정처럼 보였다(#13).
+     */
+    pinned: boolean().notNull().default(false),
     caption: text(),
     visibility: text({ enum: postVisibilities }).notNull().default('friends'),
     publishedAt: timestamp({ withTimezone: true }),

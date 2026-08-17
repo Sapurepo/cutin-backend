@@ -126,9 +126,9 @@ export class PostsController {
 
   @Patch('posts/:id')
   @ApiOperation({
-    summary: 'draft 편집 · 발행본은 대표 컷만',
+    summary: 'draft 편집 · 발행본은 대표 컷과 고정만',
     description:
-      'cuts를 보내면 기존 컷을 전부 대체한다. 발행된 포스트는 thumbnailCutIndex 하나만 바꿀 수 있다(0 = 기본 첫 컷 = 고정 해제) — 다른 필드가 섞이면 POST_NOT_DRAFT.',
+      'cuts를 보내면 기존 컷을 전부 대체한다. 발행된 포스트는 thumbnailCutIndex(0 = 기본 첫 컷)와 pinned(프로필 맨 앞 고정)만 바꿀 수 있다 — 다른 필드가 섞이면 POST_NOT_DRAFT.',
   })
   @ZodResponse({ status: 200, type: PostDto })
   @ApiErrors(400, 401, 404)

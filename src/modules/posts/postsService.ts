@@ -90,21 +90,26 @@ export class PostsService {
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number | null
+      pinned?: boolean
       frameId?: string | null
       cuts?: CutInput[]
     },
   ) {
     const post = await this.requireOwnPost(postId, authorId)
     const { cuts, ...rest } = values
-    /* 발행된 포스트는 **대표 컷만** 바꿀 수 있다(§6.3 고정 지정/해제, #13). 다른 필드가 하나라도
-     * 섞이면 draft 규칙 그대로 거절한다 — 발행본의 캡션·컷·공개 범위는 편집 대상이 아니다.
+    /* 발행된 포스트는 **대표 컷과 고정만** 바꿀 수 있다(§6.3, #13). 다른 필드가 하나라도 섞이면
+     * draft 규칙 그대로 거절한다 — 발행본의 캡션·컷·공개 범위는 편집 대상이 아니다.
      * 발행 시 미지정을 0으로 채우므로(`publish`) 발행 뒤의 null도 0으로 — 발행본은 항상 non-null. */
     if (post.status !== 'draft') {
-      const others = Object.keys(values).filter((key) => key !== 'thumbnailCutIndex')
-      if (others.length > 0 || values.thumbnailCutIndex === undefined) {
-        throw AppError.badRequest('POST_NOT_DRAFT', '발행된 포스트는 대표 컷만 바꿀 수 있습니다.')
+      const editable = new Set(['thumbnailCutIndex', 'pinned'])
+      const keys = Object.keys(values)
+      if (keys.length === 0 || keys.some((key) => !editable.has(key))) {
+        throw AppError.badRequest(
+          'POST_NOT_DRAFT',
+          '발행된 포스트는 대표 컷과 고정만 바꿀 수 있습니다.',
+        )
       }
-      rest.thumbnailCutIndex = values.thumbnailCutIndex ?? 0
+      if (values.thumbnailCutIndex === null) rest.thumbnailCutIndex = 0
     }
     const template = await this.requireTemplate(values.templateId ?? post.templateId)
 
@@ -131,6 +136,7 @@ export class PostsService {
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number
+      pinned?: boolean
     },
   ) {
     const post = await this.requireOwnDraft(postId, authorId)
@@ -158,6 +164,8 @@ export class PostsService {
     await this.repository.publish(postId, {
       composedMediaId: values.composedMediaId,
       thumbnailCutIndex,
+      // 고정은 발행 요청이 말한 대로, 없으면 draft에 있던 값(대표 컷을 고르며 미리 켰을 수 있다).
+      pinned: values.pinned ?? post.pinned,
       caption: values.caption ?? post.caption,
       visibility: values.visibility ?? post.visibility,
     })
@@ -231,6 +239,7 @@ export class PostsService {
       visibility: post.visibility,
       caption: post.caption,
       thumbnailCutIndex: post.thumbnailCutIndex,
+      pinned: post.pinned,
       cuts: post.cuts.map((cut) => ({
         cutIndex: cut.cutIndex,
         media: this.mediaService.toView(cut.media),

@@ -132,6 +132,7 @@ export class PostsRepository {
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number | null
+      pinned?: boolean
       frameId?: string | null
     },
   ): Promise<Post | undefined> {
@@ -158,6 +159,7 @@ export class PostsRepository {
     values: {
       composedMediaId: string
       thumbnailCutIndex: number
+      pinned: boolean
       caption: string | null
       visibility: PostVisibility
     },

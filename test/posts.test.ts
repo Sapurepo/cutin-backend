@@ -256,13 +256,15 @@ test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', 
   const post = detail.json() as {
     status: string
     thumbnailCutIndex: number
+    pinned: boolean
     publishedAt: string | null
     cuts: { cutIndex: number; media: { url: string } }[]
     composed: { url: string } | null
   }
   expect(post.status).toBe('published')
-  // 썸네일 미지정 시 첫 컷이 대표가 된다 (§6.3).
+  // 썸네일 미지정 시 첫 컷이 대표가 된다 (§6.3). 고정은 말하지 않으면 꺼져 있다.
   expect(post.thumbnailCutIndex).toBe(0)
+  expect(post.pinned).toBe(false)
   expect(post.publishedAt).not.toBeNull()
   expect(post.cuts).toHaveLength(1)
   expect(post.composed).not.toBeNull()
@@ -275,7 +277,7 @@ test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', 
   expect(noDraft.statusCode).toBe(404)
 })
 
-test('발행된 포스트는 대표 컷만 바꿀 수 있다 — 고정 해제는 0', async () => {
+test('발행된 포스트는 대표 컷과 고정만 바꿀 수 있다', async () => {
   const alice = await createUser('alice')
   const bob = await createUser('bob')
 
@@ -311,20 +313,35 @@ test('발행된 포스트는 대표 컷만 바꿀 수 있다 — 고정 해제�
     method: 'POST',
     url: `/posts/${postId}/publish`,
     headers: alice.headers,
-    payload: { composedMediaId, visibility: 'public' },
+    payload: { composedMediaId, visibility: 'public', pinned: true },
   })
   expect(published.statusCode).toBe(200)
-  expect((published.json() as { thumbnailCutIndex: number }).thumbnailCutIndex).toBe(1)
+  const view = published.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(view.thumbnailCutIndex).toBe(1)
+  expect(view.pinned).toBe(true)
 
-  // 고정 해제 — 0으로.
+  // 고정 해제 — pinned false. 대표 컷은 그대로다(고정과 대표 컷은 별개).
   const unpin = await context.app.inject({
     method: 'PATCH',
     url: `/posts/${postId}`,
     headers: alice.headers,
-    payload: { thumbnailCutIndex: 0 },
+    payload: { pinned: false },
   })
   expect(unpin.statusCode).toBe(200)
-  expect((unpin.json() as { thumbnailCutIndex: number }).thumbnailCutIndex).toBe(0)
+  const unpinned = unpin.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(unpinned.pinned).toBe(false)
+  expect(unpinned.thumbnailCutIndex).toBe(1)
+
+  // 다시 고정 — 대표 컷과 함께 보낼 수도 있다.
+  const pin = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { pinned: true, thumbnailCutIndex: 0 },
+  })
+  const pinned = pin.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(pinned.pinned).toBe(true)
+  expect(pinned.thumbnailCutIndex).toBe(0)
 
   // 다시 지정도 된다. null은 발행본에서 0으로 남는다(발행본은 항상 non-null).
   const repin = await context.app.inject({
