@@ -1,7 +1,15 @@
+import { Logger } from '@nestjs/common'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { env } from '../../config/env.ts'
 import type { OauthProvider } from '../../db/schema/index.ts'
 import { AppError } from '../../shared/errors/appError.ts'
+
+/**
+ * 클라이언트에는 실패 이유를 뭉뚱그려 내려보내지만(토큰 유효성 탐색을 돕지 않는다),
+ * 서버 로그에는 남긴다. 이게 없으면 401만 찍혀 프로바이더 문제인지 우리 문제인지 알 수 없다.
+ * 토큰은 절대 로그에 넣지 않는다.
+ */
+const logger = new Logger('OauthVerifier')
 
 export interface OauthProfile {
   provider: OauthProvider
@@ -44,6 +52,9 @@ async function verifyKakao(accessToken: string): Promise<OauthProfile> {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!response.ok) {
+    // 카카오는 실패 이유를 본문에 담아준다 (`{"msg":...,"code":-401}`).
+    const detail = await response.text().catch(() => '')
+    logger.warn(`카카오 검증 거절 — HTTP ${response.status} ${detail.slice(0, 300)}`)
     throw AppError.unauthorized('OAUTH_VERIFICATION_FAILED', '카카오 토큰 검증에 실패했습니다.')
   }
   const body = (await response.json()) as {
@@ -67,6 +78,10 @@ export const httpOauthVerifier: OauthVerifier = {
       return provider === 'google' ? await verifyGoogle(token) : await verifyKakao(token)
     } catch (error) {
       if (error instanceof AppError) throw error
+      // 네트워크 실패·JWT 서명 불일치 등. 여기서 안 남기면 흔적이 사라진다.
+      logger.warn(
+        `${provider} 검증 중 오류 — ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`,
+      )
       throw AppError.unauthorized('OAUTH_VERIFICATION_FAILED', '소셜 토큰 검증에 실패했습니다.')
     }
   },
