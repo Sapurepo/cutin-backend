@@ -94,8 +94,18 @@ export class PostsService {
       cuts?: CutInput[]
     },
   ) {
-    const post = await this.requireOwnDraft(postId, authorId)
+    const post = await this.requireOwnPost(postId, authorId)
     const { cuts, ...rest } = values
+    /* 발행된 포스트는 **대표 컷만** 바꿀 수 있다(§6.3 고정 지정/해제, #13). 다른 필드가 하나라도
+     * 섞이면 draft 규칙 그대로 거절한다 — 발행본의 캡션·컷·공개 범위는 편집 대상이 아니다.
+     * 발행 시 미지정을 0으로 채우므로(`publish`) 발행 뒤의 null도 0으로 — 발행본은 항상 non-null. */
+    if (post.status !== 'draft') {
+      const others = Object.keys(values).filter((key) => key !== 'thumbnailCutIndex')
+      if (others.length > 0 || values.thumbnailCutIndex === undefined) {
+        throw AppError.badRequest('POST_NOT_DRAFT', '발행된 포스트는 대표 컷만 바꿀 수 있습니다.')
+      }
+      rest.thumbnailCutIndex = values.thumbnailCutIndex ?? 0
+    }
     const template = await this.requireTemplate(values.templateId ?? post.templateId)
 
     // null은 선택 해제라 검사할 프레임이 없다. 서버가 기본 외형으로 치환하지 않는다.
@@ -285,11 +295,16 @@ export class PostsService {
     }
   }
 
-  private async requireOwnDraft(postId: string, authorId: string): Promise<Post> {
+  private async requireOwnPost(postId: string, authorId: string): Promise<Post> {
     const post = await this.repository.findPost(postId)
     if (post === undefined || post.authorId !== authorId) {
       throw AppError.notFound('POST_NOT_FOUND', '포스트를 찾을 수 없습니다.')
     }
+    return post
+  }
+
+  private async requireOwnDraft(postId: string, authorId: string): Promise<Post> {
+    const post = await this.requireOwnPost(postId, authorId)
     if (post.status !== 'draft') {
       throw AppError.badRequest('POST_NOT_DRAFT', '발행된 포스트는 편집할 수 없습니다.')
     }

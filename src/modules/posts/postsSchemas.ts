@@ -78,7 +78,13 @@ export const updatePostBodySchema = z
     templateId: z.uuid().optional(),
     caption: z.string().max(500).nullable().optional(),
     visibility: z.enum(postVisibilities).optional(),
-    thumbnailCutIndex: z.number().int().min(0).nullable().optional(),
+    thumbnailCutIndex: z
+      .number()
+      .int()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe('발행 뒤에도 이 필드만은 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
     frameId: z.uuid().nullable().optional().describe(FRAME_CLEAR_NOTE),
     /** 부분 수정이 아니라 전체 교체다. */
     cuts: z.array(cutInputSchema).max(maxCutsPerRequest).optional(),
