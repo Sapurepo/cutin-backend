@@ -98,9 +98,12 @@ export async function createTestContext(): Promise<TestContext> {
     } satisfies DatabaseHandle)
     .overrideProvider(STORAGE)
     .useValue(
+      // 두 베이스를 일부러 다른 값으로 준다. 미디어 URL이 업로드 도메인에서
+      // 새어 나오면(= CDN 분리가 깨지면) 테스트가 잡는다.
       createLocalDiskStorage({
         directory: storageDir,
-        baseUrl: 'http://test.local',
+        uploadBaseUrl: 'http://test.local',
+        mediaBaseUrl: 'http://cdn.test.local',
       }),
     )
     .overrideProvider(OAUTH_VERIFIER)

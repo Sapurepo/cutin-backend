@@ -7,12 +7,16 @@ const keyPattern = /^[a-z]+\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.[a-z0-9]+$/
 
 export interface LocalDiskStorageOptions {
   directory: string
-  baseUrl: string
+  /** 클라이언트가 바이트를 PUT할 곳. 서명 URL로 가면 벤더 도메인이 된다 */
+  uploadBaseUrl: string
+  /** 클라이언트가 이미지를 GET할 곳. CDN이 붙으면 여기만 갈라진다 */
+  mediaBaseUrl: string
 }
 
 export function createLocalDiskStorage({
   directory,
-  baseUrl,
+  uploadBaseUrl,
+  mediaBaseUrl,
 }: LocalDiskStorageOptions): StorageService {
   const root = resolve(directory)
 
@@ -25,9 +29,9 @@ export function createLocalDiskStorage({
   }
 
   return {
-    createUploadTarget(key: string, mime: string): UploadTarget {
+    async createUploadTarget(key: string, mime: string): Promise<UploadTarget> {
       return {
-        url: `${baseUrl}/media/content/${key}`,
+        url: `${uploadBaseUrl}/media/content/${key}`,
         method: 'PUT',
         headers: { 'content-type': mime },
       }
@@ -57,7 +61,7 @@ export function createLocalDiskStorage({
     },
 
     url(key: string): string {
-      return `${baseUrl}/media/content/${key}`
+      return `${mediaBaseUrl}/media/content/${key}`
     },
 
     async remove(key: string): Promise<void> {
