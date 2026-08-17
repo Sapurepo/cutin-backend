@@ -112,6 +112,38 @@ test('업로드는 바이트가 도착해야 완료 처리된다', async () => {
 })
 
 /**
+ * 업로드 목적지와 미디어 URL은 다른 도메인에서 온다. CDN이 붙으면 후자만 갈라지고,
+ * 서명 URL로 가면 전자가 벤더 도메인이 된다 — 클라이언트는 둘 다 절대 URL로 받아
+ * 그대로 써야 하고 baseURL과 조립하면 안 된다.
+ */
+test('미디어 URL은 업로드 목적지와 다른 도메인으로 나간다', async () => {
+  const alice = await createUser('alice')
+  const created = await context.app.inject({
+    method: 'POST',
+    url: '/media/uploads',
+    headers: alice.headers,
+    payload: { kind: 'cut', mime: 'image/png' },
+  })
+  const target = created.json() as { mediaId: string; url: string }
+  expect(target.url.startsWith('http://test.local/')).toBe(true)
+
+  await context.app.inject({
+    method: 'PUT',
+    url: new URL(target.url).pathname,
+    headers: { ...alice.headers, 'content-type': 'image/png' },
+    payload: pngBytes,
+  })
+  const completed = await context.app.inject({
+    method: 'POST',
+    url: `/media/${target.mediaId}/complete`,
+    headers: alice.headers,
+    payload: { width: 1, height: 1 },
+  })
+  expect(completed.statusCode).toBe(200)
+  expect((completed.json() as { url: string }).url.startsWith('http://cdn.test.local/')).toBe(true)
+})
+
+/**
  * 업로드 상한(15MB)은 Fastify 본문 파서 옵션이 강제한다.
  * 어댑터가 FST_ERR_* 코드를 버리므로 상태 코드로만 구분되는데,
  * 사용자에게 보여줄 문구가 달린 자리라 code를 고정해 둔다.
@@ -185,6 +217,31 @@ test('컷이 덜 찼거나 합성본이 없으면 발행되지 않는다', async
   })
   expect(outOfRange.statusCode).toBe(400)
   expect(outOfRange.json().error.code).toBe('CUT_INDEX_OUT_OF_RANGE')
+})
+
+/**
+ * iOS의 Swift UUID는 JSON에서 대문자로 직렬화된다. DB는 소문자를 돌려주므로
+ * 문자열로 비교하면 ready인 컷도 거절된다 — 대소문자 무관하게 붙어야 한다.
+ */
+test('대문자 mediaId로도 컷을 붙일 수 있다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+  const cutMediaId = await uploadMedia(alice, 'cut')
+
+  const attached = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { cuts: [{ cutIndex: 0, mediaId: cutMediaId.toUpperCase() }] },
+  })
+  expect(attached.statusCode).toBe(200)
 })
 
 test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', async () => {

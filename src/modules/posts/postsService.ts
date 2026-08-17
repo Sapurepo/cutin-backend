@@ -322,7 +322,8 @@ export class PostsService {
       throw AppError.badRequest('CUT_INDEX_OUT_OF_RANGE', '템플릿의 컷 수를 넘는 자리입니다.')
     }
 
-    const mediaIds = cuts.map((cut) => cut.mediaId)
+    // iOS의 Swift UUID는 대문자로 직렬화되고 DB는 소문자를 돌려준다 — 소문자로 맞춰 비교한다.
+    const mediaIds = cuts.map((cut) => cut.mediaId.toLowerCase())
     const ready = await this.mediaRepository.findReadyByIds(mediaIds, ownerId)
     const readyIds = new Set(ready.filter((row) => row.kind === 'cut').map((row) => row.id))
     if (mediaIds.some((id) => !readyIds.has(id))) {
