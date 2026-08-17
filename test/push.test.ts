@@ -23,12 +23,17 @@ beforeEach(async () => {
   context.push.reset()
 })
 
-function registerDevice(user: TestUser, timezone: string, pushToken: string) {
+function registerDevice(
+  user: TestUser,
+  timezone: string,
+  pushToken: string,
+  pushEnvironment: 'sandbox' | 'production' = 'production',
+) {
   return context.app.inject({
     method: 'POST',
     url: '/devices',
     headers: user.headers,
-    payload: { platform: 'ios', pushToken, timezone },
+    payload: { platform: 'ios', pushToken, pushEnvironment, timezone },
   })
 }
 
@@ -64,11 +69,61 @@ test('올바르지 않은 타임존은 거절한다', async () => {
     method: 'POST',
     url: '/devices',
     headers: alice.headers,
-    payload: { platform: 'ios', pushToken: 'token-x', timezone: 'Mars/Olympus' },
+    payload: {
+      platform: 'ios',
+      pushToken: 'token-x',
+      pushEnvironment: 'production',
+      timezone: 'Mars/Olympus',
+    },
   })
 
   expect(response.statusCode).toBe(400)
   expect(response.json().error.code).toBe('VALIDATION_FAILED')
+})
+
+/**
+ * 선택 항목이었다면 클라이언트가 안 보낸 디바이스가 조용히 production으로 등록되고
+ * sandbox 빌드의 푸시가 전부 실패한다. 원인이 안 드러나는 실패보다 400이 낫다.
+ */
+test('pushEnvironment 없이는 디바이스를 등록할 수 없다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'POST',
+    url: '/devices',
+    headers: alice.headers,
+    payload: { platform: 'ios', pushToken: 'token-x', timezone: 'Asia/Seoul' },
+  })
+
+  expect(response.statusCode).toBe(400)
+  expect(response.json().error.code).toBe('VALIDATION_FAILED')
+})
+
+/**
+ * APNs 토큰은 한 환경에서만 유효하므로 발송 대상마다 환경이 따라가야 한다.
+ * 같은 토큰이 다른 환경으로 재등록되면 upsert가 값을 갱신해야 한다 —
+ * `set` 절에서 빠뜨리면 옛 환경이 남아 조용히 잘못된 엔드포인트로 나간다.
+ */
+test('디바이스 환경이 푸시 메시지까지 따라간다', async () => {
+  const alice = await createUser('alice')
+  await registerDevice(alice, 'Asia/Seoul', 'token-1', 'sandbox')
+  await setSlots(alice, ['morning'])
+
+  // 2026-08-13T23:05Z → 서울 08:05, 아침 슬롯이 열린다.
+  await reminderJob().run(new Date('2026-08-13T23:05:00Z'))
+  expect(context.push.sent).toHaveLength(1)
+  expect(context.push.sent[0]).toMatchObject({
+    pushToken: 'token-1',
+    pushEnvironment: 'sandbox',
+  })
+
+  // 같은 토큰을 production으로 다시 등록하면 갱신돼야 한다.
+  const again = await registerDevice(alice, 'Asia/Seoul', 'token-1', 'production')
+  expect(again.json().pushEnvironment).toBe('production')
+
+  context.push.reset()
+  await reminderJob().run(new Date('2026-08-13T23:05:00Z'))
+  expect(context.push.sent[0]).toMatchObject({ pushEnvironment: 'production' })
 })
 
 /**
@@ -252,5 +307,49 @@ test('purge는 보존 기간이 지난 소프트 삭제만 지운다', async () 
     .where(sql`${posts.id} = ${recentId}::uuid`)
 
   const purged = await retentionJob().purge(now)
+  expect(purged.posts).toBe(1)
+})
+
+/**
+ * 댓글·반응·보관이 달린 포스트도 purge돼야 한다.
+ * posts를 참조하는 테이블이 전부 ON DELETE NO ACTION이라, 참조 행을 먼저 지우지 않으면
+ * FK 위반으로 잡 전체가 실패한다. P5 테스트는 참조가 없는 포스트만 봐서 놓쳤다.
+ */
+test('참조가 달린 포스트도 purge된다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+  await makeFriends(alice, bob)
+  const postId = await publishPost(alice, 'friends')
+
+  await context.app.inject({
+    method: 'POST',
+    url: `/posts/${postId}/comments`,
+    headers: bob.headers,
+    payload: { body: '좋다' },
+  })
+  await context.app.inject({
+    method: 'PUT',
+    url: `/posts/${postId}/reaction`,
+    headers: bob.headers,
+    payload: { type: 'like' },
+  })
+  await context.app.inject({
+    method: 'PUT',
+    url: `/posts/${postId}/bookmark`,
+    headers: bob.headers,
+  })
+
+  await context.app.inject({
+    method: 'DELETE',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+  })
+  await context.database.db
+    .update(posts)
+    .set({ deletedAt: new Date('2025-08-11T00:00:00Z') })
+    .where(sql`${posts.id} = ${postId}::uuid`)
+
+  const purged = await retentionJob().purge(new Date('2026-08-13T00:00:00Z'))
+
   expect(purged.posts).toBe(1)
 })

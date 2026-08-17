@@ -46,6 +46,7 @@ export class NotificationsService {
       const result = await this.push.send(
         devices.map((device) => ({
           pushToken: device.pushToken,
+          pushEnvironment: device.pushEnvironment,
           title: nickname ?? 'CUTIN',
           body: bodies[input.type],
           data: { targetType: input.targetType, targetId: input.targetId },

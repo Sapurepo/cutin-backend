@@ -14,7 +14,7 @@ export const pngBytes = Buffer.from(
 )
 
 /** 모든 테이블을 비운다. 새 테이블이 생기면 여기에 더한다. */
-export const truncateAll = `truncate table devices, reports, notifications, reactions, comments,
+export const truncateAll = `truncate table bookmarks, devices, reports, notifications, reactions, comments,
   post_cuts, posts, media, blocks, follows, friendships,
   refresh_tokens, notification_preferences, identities, users cascade`
 

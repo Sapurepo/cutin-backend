@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { env } from '../../config/env.ts'
-import type { Post, PostVisibility, Template } from '../../db/schema/index.ts'
+import type { Frame, Post, PostVisibility, Template } from '../../db/schema/index.ts'
 import { AppError } from '../../shared/errors/appError.ts'
 import { encodeCursor, type Page, toPage } from '../../shared/pagination/cursor.ts'
 import type { CursorQuery } from '../../shared/pagination/paginationSchemas.ts'
@@ -19,6 +19,21 @@ const emptyStats: PostStats = {
   reactionTotal: 0,
   reactionCounts: [],
   myReaction: null,
+  bookmarked: false,
+}
+
+function toFrameView(frame: Frame) {
+  return {
+    id: frame.id,
+    code: frame.code,
+    name: frame.name,
+    background: frame.background,
+    foreground: frame.foreground,
+    padding: frame.padding,
+    gutter: frame.gutter,
+    cellRadius: frame.cellRadius,
+    footer: frame.footer,
+  }
 }
 
 function toTemplateView(template: Template) {
@@ -43,6 +58,11 @@ export class PostsService {
   async listTemplates() {
     const items = await this.repository.listTemplates()
     return { items: items.map(toTemplateView) }
+  }
+
+  async listFrames() {
+    const items = await this.repository.listFrames()
+    return { items: items.map(toFrameView) }
   }
 
   async createDraft(authorId: string, templateId: string) {
@@ -70,6 +90,7 @@ export class PostsService {
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number | null
+      frameId?: string | null
       cuts?: CutInput[]
     },
   ) {
@@ -77,6 +98,8 @@ export class PostsService {
     const { cuts, ...rest } = values
     const template = await this.requireTemplate(values.templateId ?? post.templateId)
 
+    // null은 선택 해제라 검사할 프레임이 없다. 서버가 기본 외형으로 치환하지 않는다.
+    if (rest.frameId != null) await this.requireFrame(rest.frameId)
     if (cuts !== undefined) {
       await this.validateCuts(cuts, template, authorId)
     }
@@ -162,6 +185,19 @@ export class PostsService {
     return { url: `${env.PUBLIC_BASE_URL}/p/${postId}` }
   }
 
+  /** 보관 목록. 커서 키가 보관한 시각이라 `listPage`와 나눠 둔다. */
+  async listBookmarked(viewerId: string, { cursor, limit }: CursorQuery) {
+    const rows = await this.repository.listBookmarkedPostIds(viewerId, { cursor, limit })
+    const page = toPage(
+      rows,
+      limit,
+      (row) => row.id,
+      (row) => encodeCursor(row.bookmarkedAt.toISOString(), row.id),
+    )
+    const posts = await this.loadInOrder(page.items)
+    return { items: await this.toViews(posts, viewerId), nextCursor: page.nextCursor }
+  }
+
   feed(viewerId: string, page: CursorQuery) {
     return this.listPage(viewerId, page)
   }
@@ -180,6 +216,7 @@ export class PostsService {
           post.author.avatar === null ? null : this.mediaService.toView(post.author.avatar).url,
       },
       template: toTemplateView(post.template),
+      frame: post.frame === null ? null : toFrameView(post.frame),
       status: post.status,
       visibility: post.visibility,
       caption: post.caption,
@@ -197,6 +234,7 @@ export class PostsService {
         counts: stats.reactionCounts,
         mine: stats.myReaction,
       },
+      bookmarked: stats.bookmarked,
     }
   }
 
@@ -258,6 +296,14 @@ export class PostsService {
     return post
   }
 
+  private async requireFrame(frameId: string): Promise<Frame> {
+    const frame = await this.repository.findFrame(frameId)
+    if (frame === undefined) {
+      throw AppError.badRequest('FRAME_NOT_FOUND', '프레임을 찾을 수 없습니다.')
+    }
+    return frame
+  }
+
   private async requireTemplate(templateId: string): Promise<Template> {
     const template = await this.repository.findTemplate(templateId)
     if (template === undefined) {
@@ -276,7 +322,8 @@ export class PostsService {
       throw AppError.badRequest('CUT_INDEX_OUT_OF_RANGE', '템플릿의 컷 수를 넘는 자리입니다.')
     }
 
-    const mediaIds = cuts.map((cut) => cut.mediaId)
+    // iOS의 Swift UUID는 대문자로 직렬화되고 DB는 소문자를 돌려준다 — 소문자로 맞춰 비교한다.
+    const mediaIds = cuts.map((cut) => cut.mediaId.toLowerCase())
     const ready = await this.mediaRepository.findReadyByIds(mediaIds, ownerId)
     const readyIds = new Set(ready.filter((row) => row.kind === 'cut').map((row) => row.id))
     if (mediaIds.some((id) => !readyIds.has(id))) {

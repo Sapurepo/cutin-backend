@@ -1,0 +1,1 @@
+ALTER TABLE "devices" ADD COLUMN "push_environment" text DEFAULT 'production' NOT NULL;

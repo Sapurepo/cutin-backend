@@ -112,6 +112,38 @@ test('업로드는 바이트가 도착해야 완료 처리된다', async () => {
 })
 
 /**
+ * 업로드 목적지와 미디어 URL은 다른 도메인에서 온다. CDN이 붙으면 후자만 갈라지고,
+ * 서명 URL로 가면 전자가 벤더 도메인이 된다 — 클라이언트는 둘 다 절대 URL로 받아
+ * 그대로 써야 하고 baseURL과 조립하면 안 된다.
+ */
+test('미디어 URL은 업로드 목적지와 다른 도메인으로 나간다', async () => {
+  const alice = await createUser('alice')
+  const created = await context.app.inject({
+    method: 'POST',
+    url: '/media/uploads',
+    headers: alice.headers,
+    payload: { kind: 'cut', mime: 'image/png' },
+  })
+  const target = created.json() as { mediaId: string; url: string }
+  expect(target.url.startsWith('http://test.local/')).toBe(true)
+
+  await context.app.inject({
+    method: 'PUT',
+    url: new URL(target.url).pathname,
+    headers: { ...alice.headers, 'content-type': 'image/png' },
+    payload: pngBytes,
+  })
+  const completed = await context.app.inject({
+    method: 'POST',
+    url: `/media/${target.mediaId}/complete`,
+    headers: alice.headers,
+    payload: { width: 1, height: 1 },
+  })
+  expect(completed.statusCode).toBe(200)
+  expect((completed.json() as { url: string }).url.startsWith('http://cdn.test.local/')).toBe(true)
+})
+
+/**
  * 업로드 상한(15MB)은 Fastify 본문 파서 옵션이 강제한다.
  * 어댑터가 FST_ERR_* 코드를 버리므로 상태 코드로만 구분되는데,
  * 사용자에게 보여줄 문구가 달린 자리라 code를 고정해 둔다.
@@ -185,6 +217,31 @@ test('컷이 덜 찼거나 합성본이 없으면 발행되지 않는다', async
   })
   expect(outOfRange.statusCode).toBe(400)
   expect(outOfRange.json().error.code).toBe('CUT_INDEX_OUT_OF_RANGE')
+})
+
+/**
+ * iOS의 Swift UUID는 JSON에서 대문자로 직렬화된다. DB는 소문자를 돌려주므로
+ * 문자열로 비교하면 ready인 컷도 거절된다 — 대소문자 무관하게 붙어야 한다.
+ */
+test('대문자 mediaId로도 컷을 붙일 수 있다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+  const cutMediaId = await uploadMedia(alice, 'cut')
+
+  const attached = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { cuts: [{ cutIndex: 0, mediaId: cutMediaId.toUpperCase() }] },
+  })
+  expect(attached.statusCode).toBe(200)
 })
 
 test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', async () => {
@@ -341,4 +398,123 @@ test('아바타를 올리면 프로필과 포스트 작성자에 함께 반영�
     headers: alice.headers,
   })
   expect((detail.json() as { author: { avatarUrl: string } }).author.avatarUrl).toBe(avatarUrl)
+})
+
+test('템플릿 8종이 내려오고 격자가 아닌 레이아웃도 표현된다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/templates',
+    headers: alice.headers,
+  })
+  const { items } = response.json() as {
+    items: { code: string; cutCount: number; aspectRatio: string; slots: unknown[] }[]
+  }
+
+  expect(items.map((item) => item.code)).toEqual([
+    'single',
+    'strip2',
+    'pair2',
+    'grid4',
+    'strip4',
+    'strip4wide',
+    'bigLeft',
+    'grid6',
+  ])
+
+  // 두 컷은 세로(1:2)와 가로(2:1) 둘 다 있다.
+  expect(items.find((item) => item.code === 'strip2')?.aspectRatio).toBe('1:2')
+  expect(items.find((item) => item.code === 'pair2')?.aspectRatio).toBe('2:1')
+
+  // 격자로 떨어지지 않는 bigLeft도 cutCount가 자리 개수와 맞는다.
+  const bigLeft = items.find((item) => item.code === 'bigLeft')
+  expect(bigLeft?.cutCount).toBe(4)
+  expect(bigLeft?.slots).toHaveLength(4)
+  expect(bigLeft?.slots[0]).toMatchObject({ x: 0, y: 0, height: 1 })
+})
+
+test('프레임 8종이 비율값으로 내려온다', async () => {
+  const alice = await createUser('alice')
+
+  const response = await context.app.inject({
+    method: 'GET',
+    url: '/frames',
+    headers: alice.headers,
+  })
+  expect(response.statusCode).toBe(200)
+  const { items } = response.json() as {
+    items: { code: string; padding: number; footer: string | null }[]
+  }
+
+  expect(items).toHaveLength(8)
+  // 첫 항목이 기본 외형이다 — 앞에 끼워 넣으면 frame이 null인 기존 포스트가 달라 보인다.
+  expect(items[0]?.code).toBe('basic')
+  // basic만 푸터가 없다.
+  expect(items.filter((item) => item.footer === null).map((item) => item.code)).toEqual(['basic'])
+  // 길이는 캔버스 폭 대비 비율이므로 숫자여야 한다 (numeric이면 문자열로 나온다).
+  expect(typeof items[0]?.padding).toBe('number')
+  expect(items[0]?.padding).toBeLessThan(1)
+})
+
+test('draft에 프레임을 붙이면 포스트에 실린다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const frames = await context.app.inject({
+    method: 'GET',
+    url: '/frames',
+    headers: alice.headers,
+  })
+  const noir = (frames.json() as { items: { id: string; code: string }[] }).items.find(
+    (item) => item.code === 'noir',
+  )
+
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+  expect(draft.json().frame).toBeNull()
+
+  const patched = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: noir?.id },
+  })
+  expect(patched.statusCode).toBe(200)
+  expect(patched.json().frame).toMatchObject({ code: 'noir', background: '#111113' })
+
+  // null은 선택 해제다. 서버가 기본 외형으로 채워 내려보내지 않는다.
+  const cleared = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: null },
+  })
+  expect(cleared.json().frame).toBeNull()
+})
+
+test('없는 프레임은 400으로 막는다', async () => {
+  const alice = await createUser('alice')
+  const template = await firstTemplate(alice)
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+
+  const response = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { frameId: '11111111-1111-4111-8111-111111111111' },
+  })
+
+  expect(response.statusCode).toBe(400)
+  expect(response.json().error.code).toBe('FRAME_NOT_FOUND')
 })

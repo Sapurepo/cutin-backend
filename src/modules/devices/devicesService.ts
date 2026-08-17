@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { DevicePlatform } from '../../db/schema/index.ts'
+import type { DevicePlatform, PushEnvironment } from '../../db/schema/index.ts'
 import { AppError } from '../../shared/errors/appError.ts'
 import { DevicesRepository } from './devicesRepository.ts'
 
@@ -13,10 +13,20 @@ export class DevicesService {
    */
   async register(
     userId: string,
-    input: { platform: DevicePlatform; pushToken: string; timezone: string },
+    input: {
+      platform: DevicePlatform
+      pushToken: string
+      pushEnvironment: PushEnvironment
+      timezone: string
+    },
   ) {
     const device = await this.repository.register({ userId, ...input })
-    return { id: device.id, platform: device.platform, timezone: device.timezone }
+    return {
+      id: device.id,
+      platform: device.platform,
+      pushEnvironment: device.pushEnvironment,
+      timezone: device.timezone,
+    }
   }
 
   async revoke(userId: string, pushToken: string): Promise<void> {

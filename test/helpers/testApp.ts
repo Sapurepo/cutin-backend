@@ -10,6 +10,7 @@ import { AppModule } from '../../src/appModule.ts'
 import { applyFastifySetup } from '../../src/appSetup.ts'
 import { createDatabase, type DatabaseHandle } from '../../src/db/client.ts'
 import { DATABASE, DATABASE_HANDLE } from '../../src/db/databaseModule.ts'
+import { seedFrames } from '../../src/db/seedFrames.ts'
 import { seedTemplates } from '../../src/db/seedTemplates.ts'
 import type { OauthProfile, OauthVerifier } from '../../src/modules/auth/oauthVerifier.ts'
 import { OAUTH_VERIFIER } from '../../src/modules/auth/oauthVerifier.ts'
@@ -80,6 +81,7 @@ export async function createTestContext(): Promise<TestContext> {
   const database = createDatabase(container.getConnectionUri())
   await migrate(database.db, { migrationsFolder: 'src/db/migrations' })
   await seedTemplates(database.db)
+  await seedFrames(database.db)
 
   const storageDir = await mkdtemp(join(tmpdir(), 'cutin-test-'))
   const oauth = createOauthVerifierStub()
@@ -96,9 +98,12 @@ export async function createTestContext(): Promise<TestContext> {
     } satisfies DatabaseHandle)
     .overrideProvider(STORAGE)
     .useValue(
+      // 두 베이스를 일부러 다른 값으로 준다. 미디어 URL이 업로드 도메인에서
+      // 새어 나오면(= CDN 분리가 깨지면) 테스트가 잡는다.
       createLocalDiskStorage({
         directory: storageDir,
-        baseUrl: 'http://test.local',
+        uploadBaseUrl: 'http://test.local',
+        mediaBaseUrl: 'http://cdn.test.local',
       }),
     )
     .overrideProvider(OAUTH_VERIFIER)

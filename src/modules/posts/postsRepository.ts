@@ -3,7 +3,10 @@ import { and, asc, count, desc, eq, inArray, isNull, type SQL, sql } from 'drizz
 import type { Database } from '../../db/client.ts'
 import { DATABASE } from '../../db/databaseModule.ts'
 import {
+  bookmarks,
   comments,
+  type Frame,
+  frames,
   type Post,
   type PostCut,
   type PostVisibility,
@@ -31,6 +34,7 @@ export interface PostStats {
   reactionTotal: number
   reactionCounts: { type: ReactionType; count: number }[]
   myReaction: ReactionType | null
+  bookmarked: boolean
 }
 
 @Injectable()
@@ -79,6 +83,19 @@ export class PostsRepository {
     })
   }
 
+  listFrames(): Promise<Frame[]> {
+    return this.db.query.frames.findMany({
+      where: eq(frames.isActive, true),
+      orderBy: [asc(frames.sortOrder), asc(frames.code)],
+    })
+  }
+
+  findFrame(frameId: string): Promise<Frame | undefined> {
+    return this.db.query.frames.findFirst({
+      where: and(eq(frames.id, frameId), eq(frames.isActive, true)),
+    })
+  }
+
   /** 부분 유니크 인덱스에 걸리면 아무것도 삽입되지 않는다. 즉 undefined는 "이미 draft가 있다"는 뜻이다. */
   async createDraft(authorId: string, templateId: string): Promise<Post | undefined> {
     const [row] = await this.db
@@ -115,6 +132,7 @@ export class PostsRepository {
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number | null
+      frameId?: string | null
     },
   ): Promise<Post | undefined> {
     const [row] = await this.db
@@ -153,12 +171,16 @@ export class PostsRepository {
     return row
   }
 
+  /** 삭제된 포스트의 보관은 의미가 없어 함께 지운다. 존재하지 않는 id가 쌓이지 않게 한다. */
   async softDelete(postId: string): Promise<void> {
     const now = new Date()
-    await this.db
-      .update(posts)
-      .set({ status: 'deleted', deletedAt: now, updatedAt: now })
-      .where(eq(posts.id, postId))
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(posts)
+        .set({ status: 'deleted', deletedAt: now, updatedAt: now })
+        .where(eq(posts.id, postId))
+      await tx.delete(bookmarks).where(eq(bookmarks.postId, postId))
+    })
   }
 
   /**
@@ -190,6 +212,36 @@ export class PostsRepository {
       .limit(limit + 1)
   }
 
+  /**
+   * 보관 목록. 정렬이 **보관한 시각** 최신순이라 `listVisiblePostIds`와 커서 키가 다르다.
+   * 노출 판정은 같은 것을 쓴다 — 보관해 둔 뒤 친구가 끊기면 목록에서도 사라져야 한다.
+   */
+  async listBookmarkedPostIds(
+    viewerId: string,
+    { cursor, limit }: PageQuery,
+  ): Promise<{ id: string; bookmarkedAt: Date }[]> {
+    const conditions = [
+      eq(bookmarks.userId, viewerId),
+      eq(posts.status, 'published'),
+      isNull(posts.deletedAt),
+      this.visibleToViewer(viewerId),
+    ]
+    if (cursor !== undefined) {
+      const [bookmarkedAt, id] = decodeCursor(cursor)
+      conditions.push(
+        sql`(${bookmarks.createdAt}, ${posts.id}) < (${bookmarkedAt}::timestamptz, ${id}::uuid)`,
+      )
+    }
+
+    return this.db
+      .select({ id: posts.id, bookmarkedAt: bookmarks.createdAt })
+      .from(bookmarks)
+      .innerJoin(posts, eq(posts.id, bookmarks.postId))
+      .where(and(...conditions))
+      .orderBy(desc(bookmarks.createdAt), desc(posts.id))
+      .limit(limit + 1)
+  }
+
   async isVisible(viewerId: string, postId: string): Promise<boolean> {
     const [row] = await this.db
       .select({ id: posts.id })
@@ -207,12 +259,18 @@ export class PostsRepository {
     const stats = new Map<string, PostStats>(
       postIds.map((id) => [
         id,
-        { commentCount: 0, reactionTotal: 0, reactionCounts: [], myReaction: null },
+        {
+          commentCount: 0,
+          reactionTotal: 0,
+          reactionCounts: [],
+          myReaction: null,
+          bookmarked: false,
+        },
       ]),
     )
     if (postIds.length === 0) return stats
 
-    const [commentRows, reactionRows, mineRows] = await Promise.all([
+    const [commentRows, reactionRows, mineRows, bookmarkRows] = await Promise.all([
       this.db
         .select({ postId: comments.postId, value: count() })
         .from(comments)
@@ -227,6 +285,10 @@ export class PostsRepository {
         .select({ postId: reactions.postId, type: reactions.type })
         .from(reactions)
         .where(and(inArray(reactions.postId, postIds), eq(reactions.userId, viewerId))),
+      this.db
+        .select({ postId: bookmarks.postId })
+        .from(bookmarks)
+        .where(and(inArray(bookmarks.postId, postIds), eq(bookmarks.userId, viewerId))),
     ])
 
     for (const row of commentRows) {
@@ -243,6 +305,10 @@ export class PostsRepository {
       const entry = stats.get(row.postId)
       if (entry !== undefined) entry.myReaction = row.type
     }
+    for (const row of bookmarkRows) {
+      const entry = stats.get(row.postId)
+      if (entry !== undefined) entry.bookmarked = true
+    }
     return stats
   }
 
@@ -253,6 +319,7 @@ export class PostsRepository {
       with: {
         author: { with: { avatar: true } },
         template: true,
+        frame: true,
         composed: true,
         cuts: { with: { media: true }, orderBy: [asc(postCuts.cutIndex)] },
       },

@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import { frames } from './frames.ts'
 import { media } from './media.ts'
 import { templates } from './templates.ts'
 import { users } from './users.ts'
@@ -30,6 +31,11 @@ export const posts = pgTable(
     templateId: uuid()
       .notNull()
       .references(() => templates.id),
+    /**
+     * 외형 선택. 서버는 이것으로 렌더링하지 않는다 —
+     * 합성본은 구워진 이미지라, draft 이어쓰기와 재편집을 위한 상태다.
+     */
+    frameId: uuid().references(() => frames.id),
     /** iOS가 만든 합성본. 발행 전에는 없다. */
     composedMediaId: uuid().references(() => media.id),
     thumbnailCutIndex: integer(),

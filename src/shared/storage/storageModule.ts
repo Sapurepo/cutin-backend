@@ -14,7 +14,8 @@ export const STORAGE = Symbol('STORAGE')
       useFactory: (): StorageService =>
         createLocalDiskStorage({
           directory: env.STORAGE_DIR,
-          baseUrl: env.PUBLIC_BASE_URL,
+          uploadBaseUrl: env.PUBLIC_BASE_URL,
+          mediaBaseUrl: env.MEDIA_BASE_URL ?? env.PUBLIC_BASE_URL,
         }),
     },
   ],

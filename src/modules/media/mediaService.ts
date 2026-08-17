@@ -40,7 +40,7 @@ export class MediaService {
   async createUpload(ownerId: string, input: { kind: MediaKind; mime: string }) {
     const storageKey = this.buildStorageKey(ownerId, input.kind, input.mime)
     const row = await this.repository.create({ ownerId, storageKey, ...input })
-    const target = this.storage.createUploadTarget(storageKey, input.mime)
+    const target = await this.storage.createUploadTarget(storageKey, input.mime)
     return { mediaId: row.id, ...target }
   }
 
