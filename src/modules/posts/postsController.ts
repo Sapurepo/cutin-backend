@@ -85,7 +85,8 @@ export class PostsController {
   @Get('users/:id/posts')
   @ApiOperation({
     summary: '사용자 포스트 목록',
-    description: '본인 id를 넣으면 기록 보관함이 된다. 노출 범위는 피드와 같은 규칙이다.',
+    description:
+      '본인 id를 넣으면 기록 보관함이 된다. 노출 범위는 피드와 같은 규칙이다. 고정(pinned)한 포스트가 맨 앞에 오고 그 안에서 발행 시각 역순이다.',
   })
   @ZodResponse({ status: 200, type: PostPageDto })
   @ApiErrors(400, 401)

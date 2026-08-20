@@ -6,8 +6,12 @@ import { encodeCursor, type Page, toPage } from '../../shared/pagination/cursor.
 import type { CursorQuery } from '../../shared/pagination/paginationSchemas.ts'
 import { MediaRepository } from '../media/mediaRepository.ts'
 import { MediaService } from '../media/mediaService.ts'
-import type { PostStats, PostWithRelations } from './postsRepository.ts'
-import { PostsRepository } from './postsRepository.ts'
+import {
+  encodePinnedSortKey,
+  type PostStats,
+  PostsRepository,
+  type PostWithRelations,
+} from './postsRepository.ts'
 
 export interface CutInput {
   cutIndex: number
@@ -291,11 +295,15 @@ export class PostsService {
       cursor,
       limit,
     })
+    // 커서 키는 리포지토리의 정렬과 짝이 맞아야 한다 — 프로필 목록은 고정이 정렬 키에 들어간다.
     const page = toPage(
       rows,
       limit,
       (row) => row.id,
-      (row) => encodeCursor(row.publishedAt?.toISOString() ?? '', row.id),
+      (row) =>
+        authorId === undefined
+          ? encodeCursor(row.publishedAt?.toISOString() ?? '', row.id)
+          : encodeCursor(encodePinnedSortKey(row.pinned, row.publishedAt), row.id),
     )
     const posts = await this.loadInOrder(page.items)
     return {
