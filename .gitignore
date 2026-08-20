@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+openapi.json
+# Apple 서명 자산. .p8은 한 번만 내려받을 수 있어 유출되면 폐기·재발급뿐이다.
+# 저장소에 둘 일이 없지만, 실수로 커밋되는 쪽이 훨씬 비싸서 막아둔다.
+*.p8
+*.p12
+*.mobileprovision
+# 로컬 디스크 스토리지의 업로드 파일. 앞의 슬래시가 없으면 src/shared/storage/까지 무시된다.
+/storage/
+*.log
+.DS_Store
