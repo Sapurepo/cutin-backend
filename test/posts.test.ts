@@ -256,13 +256,15 @@ test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', 
   const post = detail.json() as {
     status: string
     thumbnailCutIndex: number
+    pinned: boolean
     publishedAt: string | null
     cuts: { cutIndex: number; media: { url: string } }[]
     composed: { url: string } | null
   }
   expect(post.status).toBe('published')
-  // 썸네일 미지정 시 첫 컷이 대표가 된다 (§6.3).
+  // 썸네일 미지정 시 첫 컷이 대표가 된다 (§6.3). 고정은 말하지 않으면 꺼져 있다.
   expect(post.thumbnailCutIndex).toBe(0)
+  expect(post.pinned).toBe(false)
   expect(post.publishedAt).not.toBeNull()
   expect(post.cuts).toHaveLength(1)
   expect(post.composed).not.toBeNull()
@@ -273,6 +275,117 @@ test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', 
     headers: alice.headers,
   })
   expect(noDraft.statusCode).toBe(404)
+})
+
+test('발행된 포스트는 대표 컷과 고정만 바꿀 수 있다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+
+  // 두 컷짜리 템플릿 — 대표 컷을 1로 지정해야 "고정"이 된다.
+  const templates = await context.app.inject({
+    method: 'GET',
+    url: '/templates',
+    headers: alice.headers,
+  })
+  const { items } = templates.json() as { items: { id: string; cutCount: number }[] }
+  const template = items.find((item) => item.cutCount === 2)
+  expect(template).toBeDefined()
+
+  const draft = await context.app.inject({
+    method: 'POST',
+    url: '/posts',
+    headers: alice.headers,
+    payload: { templateId: template?.id },
+  })
+  const postId = (draft.json() as { id: string }).id
+  const cuts = [await uploadMedia(alice, 'cut'), await uploadMedia(alice, 'cut')]
+  await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: {
+      cuts: cuts.map((mediaId, cutIndex) => ({ cutIndex, mediaId })),
+      thumbnailCutIndex: 1,
+    },
+  })
+  const composedMediaId = await uploadMedia(alice, 'composed')
+  const published = await context.app.inject({
+    method: 'POST',
+    url: `/posts/${postId}/publish`,
+    headers: alice.headers,
+    payload: { composedMediaId, visibility: 'public', pinned: true },
+  })
+  expect(published.statusCode).toBe(200)
+  const view = published.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(view.thumbnailCutIndex).toBe(1)
+  expect(view.pinned).toBe(true)
+
+  // 고정 해제 — pinned false. 대표 컷은 그대로다(고정과 대표 컷은 별개).
+  const unpin = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { pinned: false },
+  })
+  expect(unpin.statusCode).toBe(200)
+  const unpinned = unpin.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(unpinned.pinned).toBe(false)
+  expect(unpinned.thumbnailCutIndex).toBe(1)
+
+  // 다시 고정 — 대표 컷과 함께 보낼 수도 있다.
+  const pin = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { pinned: true, thumbnailCutIndex: 0 },
+  })
+  const pinned = pin.json() as { thumbnailCutIndex: number; pinned: boolean }
+  expect(pinned.pinned).toBe(true)
+  expect(pinned.thumbnailCutIndex).toBe(0)
+
+  // 다시 지정도 된다. null은 발행본에서 0으로 남는다(발행본은 항상 non-null).
+  const repin = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { thumbnailCutIndex: 1 },
+  })
+  expect((repin.json() as { thumbnailCutIndex: number }).thumbnailCutIndex).toBe(1)
+  const nulled = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { thumbnailCutIndex: null },
+  })
+  expect((nulled.json() as { thumbnailCutIndex: number }).thumbnailCutIndex).toBe(0)
+
+  // 범위 밖은 여전히 막힌다.
+  const outOfRange = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { thumbnailCutIndex: 5 },
+  })
+  expect(outOfRange.statusCode).toBe(400)
+
+  // 다른 필드가 섞이면 발행본 편집 거절.
+  const caption = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { caption: '나중에 고침', thumbnailCutIndex: 0 },
+  })
+  expect(caption.statusCode).toBe(400)
+  expect((caption.json() as { error: { code: string } }).error.code).toBe('POST_NOT_DRAFT')
+
+  // 남의 포스트는 없는 것으로.
+  const bobs = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: bob.headers,
+    payload: { thumbnailCutIndex: 0 },
+  })
+  expect(bobs.statusCode).toBe(404)
 })
 
 test('친구공개 포스트는 맞팔 관계에만 보인다', async () => {

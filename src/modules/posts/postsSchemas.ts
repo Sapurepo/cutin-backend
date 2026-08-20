@@ -78,7 +78,15 @@ export const updatePostBodySchema = z
     templateId: z.uuid().optional(),
     caption: z.string().max(500).nullable().optional(),
     visibility: z.enum(postVisibilities).optional(),
-    thumbnailCutIndex: z.number().int().min(0).nullable().optional(),
+    thumbnailCutIndex: z
+      .number()
+      .int()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe('발행 뒤에도 이 필드만은 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
+    /** 프로필 맨 앞 고정. 발행 뒤에도 바꿀 수 있다. */
+    pinned: z.boolean().optional(),
     frameId: z.uuid().nullable().optional().describe(FRAME_CLEAR_NOTE),
     /** 부분 수정이 아니라 전체 교체다. */
     cuts: z.array(cutInputSchema).max(maxCutsPerRequest).optional(),
@@ -90,6 +98,8 @@ export const publishPostBodySchema = z.object({
   caption: z.string().max(500).nullable().optional(),
   visibility: z.enum(postVisibilities).optional(),
   thumbnailCutIndex: z.number().int().min(0).optional(),
+  /** 발행과 함께 고정. 없으면 false. */
+  pinned: z.boolean().optional(),
 })
 
 export const postAuthorSchema = z.object({
@@ -112,6 +122,8 @@ export const postSchema = z.object({
   visibility: z.enum(postVisibilities),
   caption: z.string().nullable(),
   thumbnailCutIndex: z.number().int().nullable(),
+  /** 프로필 그리드 맨 앞 고정(§6.3). 대표 컷과 별개다. */
+  pinned: z.boolean(),
   cuts: z.array(postCutSchema),
   /** iOS가 만든 합성본. draft에는 없다. */
   composed: mediaSchema.nullable(),

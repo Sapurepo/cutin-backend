@@ -50,6 +50,13 @@
       "when": 1786694453221,
       "tag": "0006_pushEnvironment",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786975747620,
+      "tag": "0007_pinned",
+      "breakpoints": true
     }
   ]
 }
