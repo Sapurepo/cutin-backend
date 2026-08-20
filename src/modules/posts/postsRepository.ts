@@ -17,6 +17,7 @@ import {
   type Template,
   templates,
 } from '../../db/schema/index.ts'
+import { AppError } from '../../shared/errors/appError.ts'
 import { decodeCursor } from '../../shared/pagination/cursor.ts'
 
 export interface PageQuery {
@@ -27,6 +28,29 @@ export interface PageQuery {
 export interface PostCursorRow {
   id: string
   publishedAt: Date | null
+  pinned: boolean
+}
+
+/**
+ * 고정 우선 정렬의 커서 키. `(정렬 키, 타이브레이커 id)` 두 값 규약을 지키려고
+ * boolean과 시각을 한 문자열에 담는다. 시각 표기(ISO 8601)에 없는 문자를 구분자로 쓴다.
+ */
+const pinnedKeySeparator = '|'
+
+export function encodePinnedSortKey(pinned: boolean, publishedAt: Date | null): string {
+  return `${pinned}${pinnedKeySeparator}${publishedAt?.toISOString() ?? ''}`
+}
+
+/**
+ * boolean을 **JS boolean 그대로** 돌려준다. 문자열 `'true'`를 `$1::boolean` 파라미터로
+ * 바인딩하면 드라이버를 거치며 항상 `false`가 되어 커서가 조용히 빈 페이지를 준다.
+ */
+function decodePinnedSortKey(sortKey: string): [boolean, string] {
+  const [pinned, publishedAt] = sortKey.split(pinnedKeySeparator)
+  if ((pinned !== 'true' && pinned !== 'false') || publishedAt === undefined) {
+    throw AppError.badRequest('INVALID_CURSOR', '커서가 올바르지 않습니다.')
+  }
+  return [pinned === 'true', publishedAt]
 }
 
 export interface PostStats {
@@ -188,6 +212,9 @@ export class PostsRepository {
   /**
    * 발행된 포스트를 최신순으로 훑는다. `authorId`를 주면 특정 사용자의 글만 본다.
    * 본문은 여기서 읽지 않고 id만 뽑은 뒤 `loadPosts`가 관계를 붙인다.
+   *
+   * `authorId`가 있으면 프로필 목록이므로 **고정을 맨 앞에 둔다** — 고정은 프로필 큐레이션
+   * 수단이라 남의 고정이 내 피드 위로 올라오면 안 된다. 정렬 키가 늘어나 커서도 함께 바뀐다.
    */
   async listVisiblePostIds(
     viewerId: string,
@@ -198,19 +225,31 @@ export class PostsRepository {
       isNull(posts.deletedAt),
       this.visibleToViewer(viewerId),
     ]
+    const pinnedFirst = authorId !== undefined
     if (authorId !== undefined) conditions.push(eq(posts.authorId, authorId))
     if (cursor !== undefined) {
-      const [publishedAt, id] = decodeCursor(cursor)
-      conditions.push(
-        sql`(${posts.publishedAt}, ${posts.id}) < (${publishedAt}::timestamptz, ${id}::uuid)`,
-      )
+      const [sortKey, id] = decodeCursor(cursor)
+      if (pinnedFirst) {
+        const [pinned, publishedAt] = decodePinnedSortKey(sortKey)
+        conditions.push(
+          sql`(${posts.pinned}, ${posts.publishedAt}, ${posts.id}) < (${pinned}::boolean, ${publishedAt}::timestamptz, ${id}::uuid)`,
+        )
+      } else {
+        conditions.push(
+          sql`(${posts.publishedAt}, ${posts.id}) < (${sortKey}::timestamptz, ${id}::uuid)`,
+        )
+      }
     }
 
     return this.db
-      .select({ id: posts.id, publishedAt: posts.publishedAt })
+      .select({ id: posts.id, publishedAt: posts.publishedAt, pinned: posts.pinned })
       .from(posts)
       .where(and(...conditions))
-      .orderBy(desc(posts.publishedAt), desc(posts.id))
+      .orderBy(
+        ...(pinnedFirst ? [desc(posts.pinned)] : []),
+        desc(posts.publishedAt),
+        desc(posts.id),
+      )
       .limit(limit + 1)
   }
 

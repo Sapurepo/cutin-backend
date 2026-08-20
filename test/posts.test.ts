@@ -631,3 +631,73 @@ test('없는 프레임은 400으로 막는다', async () => {
   expect(response.statusCode).toBe(400)
   expect(response.json().error.code).toBe('FRAME_NOT_FOUND')
 })
+
+test('프로필 목록은 고정을 맨 앞에 두고 피드 순서는 건드리지 않는다', async () => {
+  const alice = await createUser('alice')
+  const oldest = await publishPost(alice, 'public')
+  await publishPost(alice, 'public')
+  await publishPost(alice, 'public')
+
+  // 발행 시각만 보면 맨 뒤에 있어야 할 글을 고정한다.
+  const pin = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${oldest}`,
+    headers: alice.headers,
+    payload: { pinned: true },
+  })
+  expect(pin.statusCode).toBe(200)
+
+  const feedOrder = await feedIds(alice)
+  expect(feedOrder.at(-1)).toBe(oldest)
+
+  const profile = await context.app.inject({
+    method: 'GET',
+    url: `/users/${alice.id}/posts`,
+    headers: alice.headers,
+  })
+  expect((profile.json() as { items: { id: string }[] }).items.map((item) => item.id)).toEqual([
+    oldest,
+    ...feedOrder.filter((id) => id !== oldest),
+  ])
+
+  // 고정은 프로필 큐레이션 수단이라 피드는 그대로 최신순이다.
+  expect(await feedIds(alice)).toEqual(feedOrder)
+})
+
+test('고정 우선 정렬은 커서로 나눠 받아도 순서가 이어진다', async () => {
+  const alice = await createUser('alice')
+  const oldest = await publishPost(alice, 'public')
+  await publishPost(alice, 'public')
+  await publishPost(alice, 'public')
+
+  await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${oldest}`,
+    headers: alice.headers,
+    payload: { pinned: true },
+  })
+  const expected = await context.app.inject({
+    method: 'GET',
+    url: `/users/${alice.id}/posts`,
+    headers: alice.headers,
+  })
+  const expectedIds = (expected.json() as { items: { id: string }[] }).items.map((item) => item.id)
+
+  const paged: string[] = []
+  let cursor: string | null = null
+  for (let page = 0; page < expectedIds.length; page += 1) {
+    const query = cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`
+    const response = await context.app.inject({
+      method: 'GET',
+      url: `/users/${alice.id}/posts?limit=1${query}`,
+      headers: alice.headers,
+    })
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as { items: { id: string }[]; nextCursor: string | null }
+    paged.push(...body.items.map((item) => item.id))
+    cursor = body.nextCursor
+  }
+
+  expect(paged).toEqual(expectedIds)
+  expect(cursor).toBeNull()
+})
