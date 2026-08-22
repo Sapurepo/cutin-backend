@@ -78,14 +78,17 @@ export const updatePostBodySchema = z
   .object({
     templateId: z.uuid().optional(),
     caption: z.string().max(500).nullable().optional(),
-    visibility: z.enum(postVisibilities).optional(),
+    visibility: z
+      .enum(postVisibilities)
+      .optional()
+      .describe('발행 뒤에도 바꿀 수 있다. 바꾸는 즉시 피드·상세·보관 목록의 노출이 따라온다.'),
     thumbnailCutIndex: z
       .number()
       .int()
       .min(0)
       .nullable()
       .optional()
-      .describe('발행 뒤에도 이 필드만은 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
+      .describe('발행 뒤에도 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
     /** 프로필 맨 앞 고정. 발행 뒤에도 바꿀 수 있다. */
     pinned: z.boolean().optional(),
     frameId: z.uuid().nullable().optional().describe(FRAME_CLEAR_NOTE),
