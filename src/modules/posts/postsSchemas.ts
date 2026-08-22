@@ -2,10 +2,11 @@ import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { frameFooters, postStatuses, postVisibilities } from '../../db/schema/index.ts'
 import { pageSchema } from '../../shared/pagination/paginationSchemas.ts'
+import { uuidParamSchema } from '../../shared/validation/uuidParam.ts'
 import { mediaSchema } from '../media/mediaSchemas.ts'
 import { reactionSummarySchema } from '../reactions/reactionsSchemas.ts'
 
-export const postIdSchema = z.uuid()
+export const postIdSchema = uuidParamSchema
 
 /** 실제 상한은 템플릿의 cutCount다. 여기 값은 비정상적으로 큰 요청을 막는 안전장치일 뿐이다. */
 const maxCutsPerRequest = 20

@@ -1,8 +1,9 @@
 import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { cursorQuerySchema, pageSchema } from '../../shared/pagination/paginationSchemas.ts'
+import { uuidParamSchema } from '../../shared/validation/uuidParam.ts'
 
-export const userIdSchema = z.uuid()
+export const userIdSchema = uuidParamSchema
 
 export const publicUserSchema = z.object({
   id: z.uuid(),
