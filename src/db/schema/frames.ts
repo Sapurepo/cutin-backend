@@ -28,6 +28,24 @@ export const frames = pgTable('frames', {
   gutter: doublePrecision().notNull(),
   cellRadius: doublePrecision().notNull(),
   footer: text({ enum: frameFooters }),
+  /**
+   * 장식 그림 파일 이름(`assets/frames/` 안). 색과 길이만으로는 캐릭터도 스티커도 그릴 수 없어,
+   * 프레임의 "귀여움"이 색 바꾸기에서 멈춘다. 그림으로 받으면 외형을 늘릴 때 앱을 다시 배포하지
+   * 않아도 된다 — 이 시드만 바뀐다.
+   *
+   * **URL이 아니라 파일 이름을 담는다.** 미디어의 `storageKey`와 같은 이유로, URL은 읽는 시점에
+   * `PUBLIC_BASE_URL`로 만든다. 주소가 바뀌어도 기존 행이 따라온다.
+   *
+   * 스트립은 클라이언트가 **캔버스 폭 100%로 늘려 그리드 위/아래의 제 밴드에 놓는다**(컷 위에
+   * 겹치지 않는다). 밴드 높이는 그림의 비율이 정하므로 여기에 값이 없다 — 템플릿 비율이 달라져도
+   * 장식이 늘어나지 않는다.
+   */
+  decorTopAsset: text(),
+  decorBottomAsset: text(),
+  /** 배경 위에 까는 타일 */
+  patternAsset: text(),
+  /** 타일 폭 ÷ 캔버스 폭. `patternAsset`이 있을 때만 의미가 있다. */
+  patternScale: doublePrecision(),
   isActive: boolean().notNull().default(true),
   sortOrder: integer().notNull().default(0),
 })

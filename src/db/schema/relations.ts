@@ -19,6 +19,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.composedMediaId],
     references: [media.id],
   }),
+  motion: one(media, {
+    fields: [posts.motionMediaId],
+    references: [media.id],
+  }),
   cuts: many(postCuts),
 }))
 

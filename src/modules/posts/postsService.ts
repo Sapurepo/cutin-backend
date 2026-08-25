@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { Injectable } from '@nestjs/common'
 import { env } from '../../config/env.ts'
 import type { Frame, Post, PostVisibility, Template } from '../../db/schema/index.ts'
@@ -26,6 +28,23 @@ const emptyStats: PostStats = {
   bookmarked: false,
 }
 
+/**
+ * 장식 그림 주소. DB에는 파일 이름만 있고 URL은 읽는 시점에 만든다 — 미디어와 같은 규칙이라
+ * `PUBLIC_BASE_URL`이 바뀌어도 기존 행이 따라온다.
+ */
+function frameAssetUrl(asset: string | null): string | null {
+  return asset === null ? null : `${env.PUBLIC_BASE_URL}/frames/assets/${asset}`
+}
+
+/**
+ * 장식 그림이 놓인 곳. 저장소가 아니라 **소스와 함께 배포되는 자산**이라 `STORAGE_DIR`과
+ * 분리한다. `pnpm dev`와 `node dist/main.js` 둘 다 저장소 루트에서 도므로 cwd 기준이다.
+ */
+const FRAME_ASSETS_DIR = resolve(process.cwd(), 'assets/frames')
+
+/** 경로 조작 차단. 시드가 넣는 이름만 통과한다 — 사용자 입력이 파일 경로가 되면 안 된다. */
+const FRAME_ASSET_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.png$/
+
 function toFrameView(frame: Frame) {
   return {
     id: frame.id,
@@ -37,6 +56,10 @@ function toFrameView(frame: Frame) {
     gutter: frame.gutter,
     cellRadius: frame.cellRadius,
     footer: frame.footer,
+    decorTopUrl: frameAssetUrl(frame.decorTopAsset),
+    decorBottomUrl: frameAssetUrl(frame.decorBottomAsset),
+    patternUrl: frameAssetUrl(frame.patternAsset),
+    patternScale: frame.patternScale,
   }
 }
 
@@ -67,6 +90,21 @@ export class PostsService {
   async listFrames() {
     const items = await this.repository.listFrames()
     return { items: items.map(toFrameView) }
+  }
+
+  /**
+   * 장식 그림 바이트. 이름이 곧 파일이라 정규식으로 먼저 막고, 없는 파일은 404로 떨어뜨린다.
+   * 미디어와 달리 소유자가 없어 인증을 요구하지 않는다 — 프레임 목록 자체가 모두에게 같다.
+   */
+  async readFrameAsset(name: string): Promise<Buffer> {
+    if (!FRAME_ASSET_NAME.test(name)) {
+      throw AppError.notFound('FRAME_ASSET_NOT_FOUND', '프레임 장식을 찾을 수 없습니다.')
+    }
+    try {
+      return await readFile(resolve(FRAME_ASSETS_DIR, name))
+    } catch {
+      throw AppError.notFound('FRAME_ASSET_NOT_FOUND', '프레임 장식을 찾을 수 없습니다.')
+    }
   }
 
   async createDraft(authorId: string, templateId: string) {
@@ -137,6 +175,7 @@ export class PostsService {
     authorId: string,
     values: {
       composedMediaId: string
+      motionMediaId?: string
       caption?: string | null
       visibility?: PostVisibility
       thumbnailCutIndex?: number
@@ -159,6 +198,15 @@ export class PostsService {
       throw AppError.badRequest('MEDIA_NOT_READY', '합성본 업로드가 끝나지 않았습니다.')
     }
 
+    /* 영상은 선택이지만, **보냈다면** 준비된 자기 영상이어야 한다. 조용히 무시하면 QR을 열었을
+     * 때만 없다는 걸 알게 된다 — 그때는 다시 찍는 것 말고 할 수 있는 일이 없다. */
+    if (values.motionMediaId !== undefined) {
+      const [motion] = await this.mediaRepository.findReadyByIds([values.motionMediaId], authorId)
+      if (motion === undefined || motion.kind !== 'motion') {
+        throw AppError.badRequest('MEDIA_NOT_READY', '촬영 영상 업로드가 끝나지 않았습니다.')
+      }
+    }
+
     // 미지정 시 첫 컷이 대표가 된다 (명세 §6.3).
     const thumbnailCutIndex = values.thumbnailCutIndex ?? post.thumbnailCutIndex ?? 0
     if (thumbnailCutIndex >= template.cutCount) {
@@ -167,6 +215,7 @@ export class PostsService {
 
     await this.repository.publish(postId, {
       composedMediaId: values.composedMediaId,
+      motionMediaId: values.motionMediaId ?? post.motionMediaId,
       thumbnailCutIndex,
       // 고정은 발행 요청이 말한 대로, 없으면 draft에 있던 값(대표 컷을 고르며 미리 켰을 수 있다).
       pinned: values.pinned ?? post.pinned,
@@ -249,6 +298,7 @@ export class PostsService {
         media: this.mediaService.toView(cut.media),
       })),
       composed: post.composed === null ? null : this.mediaService.toView(post.composed),
+      motion: post.motion === null ? null : this.mediaService.toView(post.motion),
       publishedAt: post.publishedAt?.toISOString() ?? null,
       createdAt: post.createdAt.toISOString(),
       commentCount: stats.commentCount,

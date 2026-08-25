@@ -57,6 +57,20 @@
       "when": 1786975747620,
       "tag": "0007_pinned",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787619854167,
+      "tag": "0008_frameDecor",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787620239428,
+      "tag": "0009_postMotion",
+      "breakpoints": true
     }
   ]
 }

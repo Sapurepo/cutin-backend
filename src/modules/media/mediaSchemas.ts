@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { mediaKinds } from '../../db/schema/index.ts'
 
 /** 업로드를 허용하는 이미지 포맷. iOS가 HEIC로 찍을 수 있어 함께 받는다. */
-export const allowedMimes = ['image/jpeg', 'image/png', 'image/heic'] as const
+export const allowedImageMimes = ['image/jpeg', 'image/png', 'image/heic'] as const
+
+/** 촬영 영상(`motion`)만 쓴다. iOS `AVAssetWriter`가 내는 것이 mp4다. */
+export const allowedVideoMimes = ['video/mp4'] as const
+
+export const allowedMimes = [...allowedImageMimes, ...allowedVideoMimes] as const
 
 export const createUploadBodySchema = z.object({
   kind: z.enum(mediaKinds),

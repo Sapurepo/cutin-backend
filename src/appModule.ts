@@ -13,6 +13,7 @@ import { NotificationsModule } from './modules/notifications/notificationsModule
 import { PostsModule } from './modules/posts/postsModule.ts'
 import { ReactionsModule } from './modules/reactions/reactionsModule.ts'
 import { ReportsModule } from './modules/reports/reportsModule.ts'
+import { ShareModule } from './modules/share/shareModule.ts'
 import { SocialModule } from './modules/social/socialModule.ts'
 import { UsersModule } from './modules/users/usersModule.ts'
 import { AuthGuard } from './shared/auth/authGuard.ts'
@@ -36,6 +37,7 @@ import { StorageModule } from './shared/storage/storageModule.ts'
     BookmarksModule,
     NotificationsModule,
     ReportsModule,
+    ShareModule,
     DevicesModule,
     JobsModule,
   ],

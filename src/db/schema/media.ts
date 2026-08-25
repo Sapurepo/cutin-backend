@@ -1,7 +1,11 @@
 import { integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { users } from './users.ts'
 
-export const mediaKinds = ['cut', 'composed', 'avatar'] as const
+/**
+ * 미디어의 **역할**이다. 형식은 `mime`이 말한다.
+ * `motion`은 네컷을 찍는 동안 기록된 영상 — 합성본(`composed`)의 움직이는 짝이다.
+ */
+export const mediaKinds = ['cut', 'composed', 'avatar', 'motion'] as const
 export type MediaKind = (typeof mediaKinds)[number]
 
 export const mediaStatuses = ['pending', 'ready'] as const
