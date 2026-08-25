@@ -277,7 +277,7 @@ test('발행하면 draft가 풀리고 컷과 합성본이 함께 조회된다', 
   expect(noDraft.statusCode).toBe(404)
 })
 
-test('발행된 포스트는 대표 컷과 고정만 바꿀 수 있다', async () => {
+test('발행된 포스트는 대표 컷·고정·공개 범위만 바꿀 수 있다', async () => {
   const alice = await createUser('alice')
   const bob = await createUser('bob')
 
@@ -384,6 +384,55 @@ test('발행된 포스트는 대표 컷과 고정만 바꿀 수 있다', async (
     url: `/posts/${postId}`,
     headers: bob.headers,
     payload: { thumbnailCutIndex: 0 },
+  })
+  expect(bobs.statusCode).toBe(404)
+})
+
+test('발행한 뒤 공개 범위를 바꾸면 노출이 바로 따라온다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+  const carol = await createUser('carol')
+  await makeFriends(alice, bob)
+
+  const postId = await publishPost(alice, 'friends')
+  expect(await feedIds(bob)).toEqual([postId])
+  expect(await feedIds(carol)).toEqual([])
+
+  // 넓히면 친구가 아닌 사람에게도 보인다.
+  const widened = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { visibility: 'public' },
+  })
+  expect(widened.statusCode).toBe(200)
+  expect((widened.json() as { visibility: string }).visibility).toBe('public')
+  expect(await feedIds(carol)).toEqual([postId])
+
+  // 좁히면 친구에게서도 사라지고 공유 링크도 함께 막힌다.
+  const narrowed = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: alice.headers,
+    payload: { visibility: 'private' },
+  })
+  expect((narrowed.json() as { visibility: string }).visibility).toBe('private')
+  expect(await feedIds(bob)).toEqual([])
+  expect(await feedIds(alice)).toEqual([postId])
+
+  const share = await context.app.inject({
+    method: 'GET',
+    url: `/posts/${postId}/share`,
+    headers: alice.headers,
+  })
+  expect(share.statusCode).toBe(403)
+
+  // 남의 포스트 공개 범위는 건드릴 수 없다.
+  const bobs = await context.app.inject({
+    method: 'PATCH',
+    url: `/posts/${postId}`,
+    headers: bob.headers,
+    payload: { visibility: 'public' },
   })
   expect(bobs.statusCode).toBe(404)
 })

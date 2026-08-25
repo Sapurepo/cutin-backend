@@ -31,7 +31,11 @@ export interface PageQuery {
   limit: number
 }
 
-/** 한 쌍이 `friendships`에 한 행만 갖도록 uuid를 사전순으로 정렬한다. */
+/**
+ * 한 쌍이 `friendships`에 한 행만 갖도록 uuid를 사전순으로 정렬한다.
+ * 문자열 비교라 **두 값이 같은 표기(소문자)여야** Postgres의 uuid 순서와 일치한다 —
+ * 경로 파라미터는 `uuidParamSchema`가, 토큰의 sub는 DB가 이미 소문자로 맞춰 준다.
+ */
 function normalizePair(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a]
 }
@@ -161,6 +165,13 @@ export class SocialRepository {
   /** 팔로우 생성과 파생 테이블 동기화를 한 트랜잭션에서 처리한다. */
   follow(followerId: string, followeeId: string): Promise<{ friend: boolean }> {
     return this.db.transaction(async (tx) => {
+      const [userIdLow, userIdHigh] = normalizePair(followerId, followeeId)
+      /* 두 사람이 거의 동시에 서로를 팔로우하면 READ COMMITTED에서 상대의 아직 커밋되지 않은
+       * 팔로우 행이 보이지 않아 **양쪽 모두 맞팔을 놓치고 친구 행이 영영 생기지 않는다.**
+       * 쌍 단위 자문 잠금으로 같은 쌍의 팔로우를 직렬화해 뒤에 온 쪽이 반드시 상대를 보게 한다. */
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${userIdLow}), hashtext(${userIdHigh}))`,
+      )
       await tx.insert(follows).values({ followerId, followeeId }).onConflictDoNothing()
 
       const [reverse] = await tx
@@ -170,7 +181,6 @@ export class SocialRepository {
         .limit(1)
       if (reverse === undefined) return { friend: false }
 
-      const [userIdLow, userIdHigh] = normalizePair(followerId, followeeId)
       await tx.insert(friendships).values({ userIdLow, userIdHigh }).onConflictDoNothing()
       return { friend: true }
     })

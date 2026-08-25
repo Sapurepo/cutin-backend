@@ -139,16 +139,18 @@ export class PostsService {
   ) {
     const post = await this.requireOwnPost(postId, authorId)
     const { cuts, ...rest } = values
-    /* 발행된 포스트는 **대표 컷과 고정만** 바꿀 수 있다(§6.3, #13). 다른 필드가 하나라도 섞이면
-     * draft 규칙 그대로 거절한다 — 발행본의 캡션·컷·공개 범위는 편집 대상이 아니다.
+    /* 발행된 포스트는 **대표 컷·고정·공개 범위만** 바꿀 수 있다(§6.3, #13). 다른 필드가 하나라도
+     * 섞이면 draft 규칙 그대로 거절한다 — 발행본의 캡션·컷은 편집 대상이 아니다.
+     * 공개 범위는 예외다: 올린 뒤 마음이 바뀌는 것을 되돌릴 수 없으면 안 되고, 판정이 조회 시점의
+     * `posts.visibility`만 보므로 값을 바꾸면 노출도 즉시 따라온다.
      * 발행 시 미지정을 0으로 채우므로(`publish`) 발행 뒤의 null도 0으로 — 발행본은 항상 non-null. */
     if (post.status !== 'draft') {
-      const editable = new Set(['thumbnailCutIndex', 'pinned'])
+      const editable = new Set(['thumbnailCutIndex', 'pinned', 'visibility'])
       const keys = Object.keys(values)
       if (keys.length === 0 || keys.some((key) => !editable.has(key))) {
         throw AppError.badRequest(
           'POST_NOT_DRAFT',
-          '발행된 포스트는 대표 컷과 고정만 바꿀 수 있습니다.',
+          '발행된 포스트는 대표 컷·고정·공개 범위만 바꿀 수 있습니다.',
         )
       }
       if (values.thumbnailCutIndex === null) rest.thumbnailCutIndex = 0

@@ -2,10 +2,11 @@ import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import { frameFooters, postStatuses, postVisibilities } from '../../db/schema/index.ts'
 import { pageSchema } from '../../shared/pagination/paginationSchemas.ts'
+import { uuidParamSchema } from '../../shared/validation/uuidParam.ts'
 import { mediaSchema } from '../media/mediaSchemas.ts'
 import { reactionSummarySchema } from '../reactions/reactionsSchemas.ts'
 
-export const postIdSchema = z.uuid()
+export const postIdSchema = uuidParamSchema
 
 /** 실제 상한은 템플릿의 cutCount다. 여기 값은 비정상적으로 큰 요청을 막는 안전장치일 뿐이다. */
 const maxCutsPerRequest = 20
@@ -87,14 +88,17 @@ export const updatePostBodySchema = z
   .object({
     templateId: z.uuid().optional(),
     caption: z.string().max(500).nullable().optional(),
-    visibility: z.enum(postVisibilities).optional(),
+    visibility: z
+      .enum(postVisibilities)
+      .optional()
+      .describe('발행 뒤에도 바꿀 수 있다. 바꾸는 즉시 피드·상세·보관 목록의 노출이 따라온다.'),
     thumbnailCutIndex: z
       .number()
       .int()
       .min(0)
       .nullable()
       .optional()
-      .describe('발행 뒤에도 이 필드만은 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
+      .describe('발행 뒤에도 바꿀 수 있다. 0 = 기본(첫 컷) = 고정 해제.'),
     /** 프로필 맨 앞 고정. 발행 뒤에도 바꿀 수 있다. */
     pinned: z.boolean().optional(),
     frameId: z.uuid().nullable().optional().describe(FRAME_CLEAR_NOTE),

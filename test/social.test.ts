@@ -77,6 +77,55 @@ test('맞팔이 성립할 때만 친구가 된다', async () => {
   expect(await listNicknames(alice, '/users/me/followers')).toEqual(['bob'])
 })
 
+test('동시에 서로를 팔로우해도 친구가 된다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+
+  // 같은 순간의 맞팔. 먼저 들어온 쪽은 상대를 아직 못 봐 friend=false로 답하지만,
+  // 뒤에 온 쪽이 반드시 맞팔을 인식해야 한다 — 둘 다 놓치면 친구 관계가 영영 안 생긴다.
+  const [first, second] = await Promise.all([follow(alice, bob), follow(bob, alice)])
+  expect(first.statusCode).toBe(200)
+  expect(second.statusCode).toBe(200)
+  expect([first, second].some((response) => response.json().friend === true)).toBe(true)
+
+  expect(await listNicknames(alice, '/users/me/friends')).toEqual(['bob'])
+  expect(await listNicknames(bob, '/users/me/friends')).toEqual(['alice'])
+})
+
+test('대문자 uuid로 팔로우해도 관계 판정이 어긋나지 않는다', async () => {
+  const alice = await createUser('alice')
+  const bob = await createUser('bob')
+
+  // Swift의 UUID는 대문자로 직렬화된다. DB가 돌려주는 소문자와 표기가 갈리면
+  // 문자열 비교로 하는 관계 판정과 친구 쌍 정렬이 조용히 빗나간다.
+  const followUpper = (actor: TestUser, target: TestUser) =>
+    context.app.inject({
+      method: 'POST',
+      url: `/users/${target.id.toUpperCase()}/follow`,
+      headers: actor.headers,
+    })
+
+  await followUpper(alice, bob)
+  expect((await followUpper(bob, alice)).json()).toEqual({ following: true, friend: true })
+
+  const profile = await context.app.inject({
+    method: 'GET',
+    url: `/users/${bob.id.toUpperCase()}`,
+    headers: alice.headers,
+  })
+  expect(profile.json()).toMatchObject({ following: true, followedBy: true, friend: true })
+  expect(await listNicknames(alice, '/users/me/friends')).toEqual(['bob'])
+
+  // 소문자로 언팔로우해도 대문자로 만들어진 친구 행이 함께 지워진다.
+  const unfollowed = await context.app.inject({
+    method: 'DELETE',
+    url: `/users/${bob.id}/follow`,
+    headers: alice.headers,
+  })
+  expect(unfollowed.statusCode).toBe(204)
+  expect(await listNicknames(alice, '/users/me/friends')).toEqual([])
+})
+
 test('같은 사용자를 두 번 팔로우해도 친구 관계는 한 번만 생긴다', async () => {
   const alice = await createUser('alice')
   const bob = await createUser('bob')
