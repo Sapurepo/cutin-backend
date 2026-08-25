@@ -39,6 +39,11 @@ export const posts = pgTable(
     frameId: uuid().references(() => frames.id),
     /** iOS가 만든 합성본. 발행 전에는 없다. */
     composedMediaId: uuid().references(() => media.id),
+    /**
+     * 네컷을 찍는 동안 기록된 영상(`media.kind = 'motion'`). 합성본의 움직이는 짝이다.
+     * 없을 수 있다 — 녹화가 실패하거나 권한이 없어도 발행은 막지 않는다.
+     */
+    motionMediaId: uuid().references(() => media.id),
     thumbnailCutIndex: integer(),
     /**
      * 프로필 그리드 맨 앞 고정(iOS §6.3). 대표 컷과 별개의 값이다 — 0.3.0은 "대표 컷을 직접 지정하면

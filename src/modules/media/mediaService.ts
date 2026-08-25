@@ -10,6 +10,16 @@ const extensions: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/heic': 'heic',
+  'video/mp4': 'mp4',
+}
+
+/**
+ * 종류와 형식은 짝이 맞아야 한다. 둘을 따로 검증하면 클라이언트 결함 하나로 컷 자리에 영상이
+ * 들어가고, 그 포스트는 피드에서 영영 그려지지 않는다.
+ */
+function mimeMatchesKind(kind: MediaKind, mime: string): boolean {
+  const wantsVideo = kind === 'motion'
+  return wantsVideo === mime.startsWith('video/')
 }
 
 export interface MediaView {
@@ -38,6 +48,9 @@ export class MediaService {
   }
 
   async createUpload(ownerId: string, input: { kind: MediaKind; mime: string }) {
+    if (!mimeMatchesKind(input.kind, input.mime)) {
+      throw AppError.badRequest('MIME_KIND_MISMATCH', '종류에 맞지 않는 형식입니다.')
+    }
     const storageKey = this.buildStorageKey(ownerId, input.kind, input.mime)
     const row = await this.repository.create({ ownerId, storageKey, ...input })
     const target = await this.storage.createUploadTarget(storageKey, input.mime)
@@ -84,7 +97,7 @@ export class MediaService {
   private buildStorageKey(ownerId: string, kind: MediaKind, mime: string): string {
     const extension = extensions[mime]
     if (extension === undefined) {
-      throw AppError.badRequest('UNSUPPORTED_MIME', '지원하지 않는 이미지 형식입니다.')
+      throw AppError.badRequest('UNSUPPORTED_MIME', '지원하지 않는 형식입니다.')
     }
     return `${kind}/${ownerId}/${randomUUID()}.${extension}`
   }

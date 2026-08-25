@@ -547,7 +547,7 @@ test('템플릿 8종이 내려오고 격자가 아닌 레이아웃도 표현된�
   expect(bigLeft?.slots[0]).toMatchObject({ x: 0, y: 0, height: 1 })
 })
 
-test('프레임 8종이 비율값으로 내려온다', async () => {
+test('프레임이 비율값으로 내려오고 장식은 URL로 나간다', async () => {
   const alice = await createUser('alice')
 
   const response = await context.app.inject({
@@ -557,10 +557,18 @@ test('프레임 8종이 비율값으로 내려온다', async () => {
   })
   expect(response.statusCode).toBe(200)
   const { items } = response.json() as {
-    items: { code: string; padding: number; footer: string | null }[]
+    items: {
+      code: string
+      padding: number
+      footer: string | null
+      decorTopUrl: string | null
+      decorBottomUrl: string | null
+      patternUrl: string | null
+      patternScale: number | null
+    }[]
   }
 
-  expect(items).toHaveLength(8)
+  expect(items).toHaveLength(14)
   // 첫 항목이 기본 외형이다 — 앞에 끼워 넣으면 frame이 null인 기존 포스트가 달라 보인다.
   expect(items[0]?.code).toBe('basic')
   // basic만 푸터가 없다.
@@ -568,6 +576,18 @@ test('프레임 8종이 비율값으로 내려온다', async () => {
   // 길이는 캔버스 폭 대비 비율이므로 숫자여야 한다 (numeric이면 문자열로 나온다).
   expect(typeof items[0]?.padding).toBe('number')
   expect(items[0]?.padding).toBeLessThan(1)
+
+  // 장식은 DB에 파일 이름만 있고 URL은 읽는 시점에 만들어진다.
+  const heart = items.find((item) => item.code === 'heart')
+  expect(heart?.decorTopUrl).toMatch(/^https?:\/\/.+\/frames\/assets\/heart-top\.png$/)
+  expect(heart?.patternScale).toBeCloseTo(180 / 1080)
+
+  /* 스트립은 위아래가 한 벌이다 — 한쪽만 있으면 합성본의 아래(또는 위)만 허전해진다.
+   * 시드가 한쪽을 빠뜨려도 화면에서는 "원래 그런 프레임"으로 보여 눈치채기 어렵다. */
+  for (const item of items) {
+    expect(item.decorTopUrl === null).toBe(item.decorBottomUrl === null)
+    expect(item.patternScale === null).toBe(item.patternUrl === null)
+  }
 })
 
 test('draft에 프레임을 붙이면 포스트에 실린다', async () => {

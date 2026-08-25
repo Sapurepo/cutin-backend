@@ -169,8 +169,15 @@ src/
     <domain>Schemas.ts       Zod 스키마 + createZodDto 래퍼
   shared/                    여러 도메인이 함께 쓰는 것만
   jobs/                      pg-boss 스케줄과 잡 본체
+assets/frames/               프레임 장식 PNG — 소스와 함께 배포되는 자산입니다
 test/                        라우트 레벨 통합 테스트
 ```
+
+`assets/frames/`는 저장소(`STORAGE_DIR`)가 아니라 **소스와 함께 나가는 자산**입니다.
+`GET /frames`가 주는 장식 URL이 여기를 가리키고, DB에는 파일 이름만 담습니다 —
+URL은 읽는 시점에 `PUBLIC_BASE_URL`로 만들어 주소가 바뀌어도 기존 행이 따라옵니다.
+그림을 굽는 스크립트는 클라이언트 저장소에 있습니다(`cutin-ios` `Scripts/frames/`).
+경로가 cwd 기준이라 `pnpm dev`·`node dist/main.js` 모두 **저장소 루트에서** 실행합니다.
 
 다섯 파일이 항상 필요하지는 않습니다. 리포지토리가 얇으면 서비스에 합쳐도 되지만,
 **컨트롤러에 쿼리를 직접 쓰지는 않습니다.** 공용 코드는 두 번째 사용처가 생겼을 때
@@ -189,12 +196,16 @@ test/                        라우트 레벨 통합 테스트
 | `users` | 6 | 프로필 · 온보딩 · 설정 |
 | `posts` | 12 | 작성(draft) · 발행 · 피드 · 템플릿 · 프레임 |
 | `social` | 10 | 팔로우 · 친구(맞팔) · 차단 · 검색 · 추천 |
-| `media` | 4 | 업로드 · 조회 |
+| `media` | 4 | 업로드 · 조회(`Range` 지원) |
 | `comments` · `reactions` | 5 | 댓글 · 반응 |
 | `bookmarks` | 2 | 보관 |
 | `notifications` · `devices` | 5 | 인앱 알림 · 디바이스 등록 |
 | `reports` | 1 | 신고 |
 | `system` | 1 | health |
+
+이 표 밖에 **HTML 페이지가 하나** 있습니다(스펙에서 제외). `GET /p/{id}`는 공유 링크와
+QR이 여는 공개 페이지로, 합성본과 촬영 영상을 보여줍니다. 로그인 없이 열리고 `private`
+포스트만 막습니다 — 링크를 아는 사람은 볼 수 있다는 뜻입니다(unlisted).
 
 ```bash
 pnpm openapi:export   # openapi.json 생성 — 클라이언트 codegen 입력

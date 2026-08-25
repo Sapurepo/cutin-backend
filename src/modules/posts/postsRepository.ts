@@ -182,6 +182,7 @@ export class PostsRepository {
     postId: string,
     values: {
       composedMediaId: string
+      motionMediaId: string | null
       thumbnailCutIndex: number
       pinned: boolean
       caption: string | null
@@ -362,6 +363,7 @@ export class PostsRepository {
         template: true,
         frame: true,
         composed: true,
+        motion: true,
         cuts: { with: { media: true }, orderBy: [asc(postCuts.cutIndex)] },
       },
     })

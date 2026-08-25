@@ -60,6 +60,16 @@ export const frameSchema = z.object({
   gutter: z.number(),
   cellRadius: z.number(),
   footer: z.enum(frameFooters).nullable(),
+  decorTopUrl: z
+    .string()
+    .nullable()
+    .describe('캔버스 폭 100%로 늘려 위 가장자리에 앵커한다. 높이는 그림의 비율을 따른다.'),
+  decorBottomUrl: z.string().nullable().describe('아래 가장자리에 앵커한다.'),
+  patternUrl: z.string().nullable().describe('배경 위에 까는 타일.'),
+  patternScale: z
+    .number()
+    .nullable()
+    .describe('타일 폭 ÷ 캔버스 폭. patternUrl이 있을 때만 의미가 있다.'),
 })
 
 export const framesResponseSchema = z.object({
@@ -95,6 +105,10 @@ export const updatePostBodySchema = z
 
 export const publishPostBodySchema = z.object({
   composedMediaId: z.uuid(),
+  motionMediaId: z
+    .uuid()
+    .optional()
+    .describe('네컷을 찍는 동안 기록된 영상. 녹화에 실패했으면 없다 — 발행을 막지 않는다.'),
   caption: z.string().max(500).nullable().optional(),
   visibility: z.enum(postVisibilities).optional(),
   thumbnailCutIndex: z.number().int().min(0).optional(),
@@ -127,6 +141,8 @@ export const postSchema = z.object({
   cuts: z.array(postCutSchema),
   /** iOS가 만든 합성본. draft에는 없다. */
   composed: mediaSchema.nullable(),
+  /** 촬영 중 기록된 영상. 없을 수 있다. */
+  motion: mediaSchema.nullable(),
   publishedAt: z.string().nullable(),
   createdAt: z.string(),
   commentCount: z.number().int().min(0),

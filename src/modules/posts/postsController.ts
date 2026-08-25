@@ -1,7 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common'
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger'
+import type { FastifyReply } from 'fastify'
 import { ZodResponse } from 'nestjs-zod'
-import { CurrentUser } from '../../shared/auth/authGuard.ts'
+import { CurrentUser, Public } from '../../shared/auth/authGuard.ts'
 import { ApiErrors } from '../../shared/errors/apiErrors.ts'
 import { CursorQueryDto } from '../../shared/pagination/paginationSchemas.ts'
 import { ZodParam } from '../../shared/validation/zodParam.ts'
@@ -34,6 +46,29 @@ export class PostsController {
   @ApiErrors(401)
   listTemplates() {
     return this.service.listTemplates()
+  }
+
+  @Public()
+  @Get('frames/assets/:name')
+  @ApiOperation({
+    summary: '프레임 장식 그림',
+    description:
+      '프레임 목록이 주는 장식 URL이 가리키는 곳이다. 모두에게 같은 자산이라 인증을 요구하지 않는다.',
+  })
+  @ApiProduces('image/png')
+  @ApiResponse({
+    status: 200,
+    description: 'PNG 바이트',
+    content: { 'image/png': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiErrors(404)
+  async readFrameAsset(@Param('name') name: string, @Res() reply: FastifyReply): Promise<void> {
+    const body = await this.service.readFrameAsset(name)
+    await reply
+      .header('content-type', 'image/png')
+      // 그림을 고치면 파일 이름을 바꾸는 것이 규칙이라 하루는 안전하다.
+      .header('cache-control', 'public, max-age=86400')
+      .send(body)
   }
 
   @Get('frames')
